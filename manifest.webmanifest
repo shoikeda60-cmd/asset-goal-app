@@ -1,0 +1,9 @@
+{
+  "name": "100万円まであと何日？",
+  "short_name": "資産進捗",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f6f7fb",
+  "theme_color": "#111827",
+  "lang": "ja"
+}

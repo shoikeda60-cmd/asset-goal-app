@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <title>100万円まであと何日？</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <style>
+    :root{
+      --bg:#f6f7fb;--card:#ffffff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;
+      --good:#047857;--bad:#b91c1c;--accent:#2563eb;--soft:#eef2ff;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{max-width:760px;margin:0 auto;padding:18px 14px 80px}
+    h1{font-size:24px;margin:4px 0 6px}
+    .sub{color:var(--muted);font-size:14px;margin-bottom:18px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin:12px 0;box-shadow:0 4px 18px rgba(0,0,0,.04)}
+    .hero{padding:18px}
+    .label{font-size:13px;color:var(--muted)}
+    .big{font-size:34px;font-weight:800;letter-spacing:-.5px;margin:4px 0}
+    .metric{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+    .metric>div{border:1px solid var(--line);border-radius:14px;padding:12px}
+    .metric b{display:block;font-size:20px;margin-top:2px}
+    input,button{font:inherit}
+    input[type="number"],input[type="date"]{width:100%;padding:14px;border:1px solid var(--line);border-radius:12px;background:#fff;font-size:18px}
+    button{border:0;border-radius:12px;padding:13px 16px;font-weight:700;cursor:pointer}
+    .primary{background:var(--accent);color:white;width:100%;margin-top:10px}
+    .secondary{background:#fff;border:1px solid var(--line);color:var(--text)}
+    .danger{background:#fff1f2;color:#9f1239;border:1px solid #fecdd3}
+    .good{color:var(--good)} .bad{color:var(--bad)}
+    .progress{height:12px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:8px}
+    .bar{height:100%;background:var(--accent);width:0}
+    .row{display:flex;gap:10px;align-items:center;justify-content:space-between}
+    .history{display:flex;flex-direction:column;gap:8px}
+    .hist{border:1px solid var(--line);border-radius:12px;padding:11px 12px;display:flex;justify-content:space-between;gap:10px}
+    .hist small{color:var(--muted)}
+    details summary{cursor:pointer;font-weight:700}
+    .settings{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+    .settings label{font-size:13px;color:var(--muted)}
+    .settings input{margin-top:5px;font-size:16px;padding:10px}
+    canvas{width:100%;height:220px;border-radius:12px;background:#fff}
+    .tiny{font-size:12px;color:var(--muted);line-height:1.5}
+    .install{display:none}
+    @media (max-width:560px){.metric,.settings{grid-template-columns:1fr}.big{font-size:30px}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>100万円まであと何日？</h1>
+  <div class="sub">資産評価額を入力するだけ。残り日数・進捗・建玉・履歴を自動計算。</div>
+
+  <div class="card hero">
+    <div class="label">現在の資産評価額</div>
+    <div id="assetBig" class="big">¥100,000</div>
+    <div id="statusText">計画スタート地点です</div>
+    <div class="progress"><div id="progressBar" class="bar"></div></div>
+    <div id="progressPct" class="label" style="margin-top:6px">10.0%</div>
+  </div>
+
+  <div class="card">
+    <div class="label">資産評価額を入力</div>
+    <input id="assetInput" type="number" inputmode="numeric" min="0" step="1" placeholder="例：137500" />
+    <button class="primary" id="saveBtn">記録して更新</button>
+  </div>
+
+  <div class="card">
+    <div class="metric">
+      <div><span class="label">100万円まで</span><b id="daysLeft">462日</b></div>
+      <div><span class="label">予想到達日</span><b id="goalDate">—</b></div>
+      <div><span class="label">計画との差</span><b id="aheadBehind">0.0日</b></div>
+      <div><span class="label" id="todayLabel">今日は</span><b id="todayDelta">0.0日分</b></div>
+      <div><span class="label">次の建玉目安</span><b id="positionSize">10,000通貨</b></div>
+      <div><span class="label">次回0.5%目標</span><b id="nextProfit">¥500</b></div>
+      <div><span class="label">今日の計画資産</span><b id="plannedToday">¥100,000</b></div>
+      <div><span class="label">開始から</span><b id="elapsed">0日</b></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row"><b>資産推移</b><span class="label">実績 / 計画</span></div>
+    <canvas id="chart" width="700" height="220"></canvas>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <b>記録</b>
+      <button class="secondary" id="exportBtn">CSV保存</button>
+    </div>
+    <div id="history" class="history" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>設定</summary>
+      <div class="settings">
+        <label>開始資産（円）<input id="startAsset" type="number" min="1" step="1"></label>
+        <label>目標資産（円）<input id="targetAsset" type="number" min="1" step="1"></label>
+        <label>1日利益率（%）<input id="dailyRate" type="number" min="0.001" step="0.001"></label>
+        <label>基準建玉（通貨）<input id="baseUnits" type="number" min="1" step="1"></label>
+        <label>基準資産（円）<input id="baseAsset" type="number" min="1" step="1"></label>
+        <label>開始日<input id="startDate" type="date"></label>
+      </div>
+      <button class="primary" id="settingsBtn">設定を保存</button>
+      <button class="danger" id="resetBtn" style="width:100%;margin-top:10px">すべての記録を削除</button>
+      <div class="tiny" style="margin-top:10px">建玉目安は「基準資産に対して基準建玉」を比例計算し、1,000通貨単位で切り捨てます。実際の取引可能数量・リスクは口座状況により異なります。</div>
+    </details>
+  </div>
+
+  <button class="primary install" id="installBtn">ホーム画面に追加</button>
+</div>
+
+<script>
+const KEY='assetGoalTrackerV1';
+const defaultState={
+  settings:{
+    startAsset:100000,targetAsset:1000000,dailyRate:0.5,
+    baseUnits:10000,baseAsset:100000,startDate:new Date().toISOString().slice(0,10)
+  },
+  records:[]
+};
+
+function load(){
+  try{
+    const x=JSON.parse(localStorage.getItem(KEY));
+    if(x && x.settings && Array.isArray(x.records)) return x;
+  }catch(e){}
+  return structuredClone(defaultState);
+}
+let state=load();
+const yen=n=>new Intl.NumberFormat('ja-JP',{style:'currency',currency:'JPY',maximumFractionDigits:0}).format(n);
+const num=n=>new Intl.NumberFormat('ja-JP').format(Math.round(n));
+const dayMs=86400000;
+const parseDate=s=>new Date(s+'T00:00:00');
+const todayDate=()=>new Date(new Date().getFullYear(),new Date().getMonth(),new Date().getDate());
+function daysBetween(a,b){ return Math.floor((b-a)/dayMs); }
+function theoreticalDays(asset){
+  const s=state.settings;
+  if(asset<=s.startAsset) return 0;
+  const r=s.dailyRate/100;
+  return Math.log(asset/s.startAsset)/Math.log(1+r);
+}
+function plannedAsset(day){
+  const s=state.settings;
+  return s.startAsset*Math.pow(1+s.dailyRate/100,day);
+}
+function daysToTargetFrom(asset){
+  const s=state.settings;
+  if(asset>=s.targetAsset) return 0;
+  return Math.ceil(Math.log(s.targetAsset/asset)/Math.log(1+s.dailyRate/100));
+}
+function save(){
+  localStorage.setItem(KEY,JSON.stringify(state));
+}
+function latest(){ return state.records[state.records.length-1] || null; }
+
+function addRecord(){
+  const v=Number(document.getElementById('assetInput').value);
+  if(!Number.isFinite(v) || v<=0){ alert('資産評価額を入力してください'); return; }
+  state.records.push({ts:new Date().toISOString(),asset:v});
+  save();
+  document.getElementById('assetInput').value='';
+  render();
+}
+
+function render(){
+  const s=state.settings;
+  const rec=latest();
+  const asset=rec?rec.asset:s.startAsset;
+  const start=parseDate(s.startDate);
+  const now=todayDate();
+  const elapsed=Math.max(0,daysBetween(start,now));
+  const planNow=plannedAsset(elapsed);
+  const achievedDay=theoreticalDays(asset);
+  const ahead=achievedDay-elapsed;
+  const left=daysToTargetFrom(asset);
+  const goal=new Date(now.getTime()+left*dayMs);
+
+  document.getElementById('assetBig').textContent=yen(asset);
+  document.getElementById('daysLeft').textContent=left+'日';
+  document.getElementById('goalDate').textContent=goal.toLocaleDateString('ja-JP',{year:'numeric',month:'short',day:'numeric'});
+  document.getElementById('plannedToday').textContent=yen(planNow);
+  document.getElementById('elapsed').textContent=elapsed+'日';
+
+  const ah=document.getElementById('aheadBehind');
+  if(Math.abs(ahead)<0.05){ ah.textContent='ほぼ予定通り'; ah.className=''; }
+  else if(ahead>0){ ah.textContent= Math.abs(ahead).toFixed(1)+'日早い'; ah.className='good'; }
+  else { ah.textContent= Math.abs(ahead).toFixed(1)+'日遅れ'; ah.className='bad'; }
+
+  const pct=Math.min(100,Math.max(0,asset/s.targetAsset*100));
+  document.getElementById('progressBar').style.width=pct+'%';
+  document.getElementById('progressPct').textContent=pct.toFixed(1)+'%';
+
+  let units=Math.floor((asset/s.baseAsset*s.baseUnits)/1000)*1000;
+  units=Math.max(0,units);
+  document.getElementById('positionSize').textContent=num(units)+'通貨';
+  document.getElementById('nextProfit').textContent=yen(asset*s.dailyRate/100);
+
+  let status='計画スタート地点です';
+  if(asset>=s.targetAsset) status='🎉 目標達成！';
+  else if(ahead>0.05) status='🟢 計画より '+ahead.toFixed(1)+'日先行';
+  else if(ahead<-0.05) status='🔴 計画より '+Math.abs(ahead).toFixed(1)+'日遅れ';
+  else status='予定どおり進行中';
+  document.getElementById('statusText').textContent=status;
+
+  const todayRecords=state.records.filter(r=>{
+    const d=new Date(r.ts); const t=todayDate();
+    return d.getFullYear()===t.getFullYear()&&d.getMonth()===t.getMonth()&&d.getDate()===t.getDate();
+  });
+  let delta=0,label='今日は';
+  if(todayRecords.length>=2){
+    delta=theoreticalDays(todayRecords[todayRecords.length-1].asset)-theoreticalDays(todayRecords[0].asset);
+  } else if(state.records.length>=2){
+    const a=state.records[state.records.length-2], b=state.records[state.records.length-1];
+    delta=theoreticalDays(b.asset)-theoreticalDays(a.asset);
+    const dd=Math.max(1,Math.round((new Date(b.ts)-new Date(a.ts))/dayMs));
+    label=dd===1?'前回入力から':'前回入力から';
+  }
+  document.getElementById('todayLabel').textContent=label;
+  const td=document.getElementById('todayDelta');
+  td.textContent=(delta>=0?'+':'')+delta.toFixed(1)+'日分';
+  td.className=delta>0?'good':delta<0?'bad':'';
+
+  renderHistory();
+  renderChart();
+
+  ['startAsset','targetAsset','dailyRate','baseUnits','baseAsset','startDate'].forEach(id=>{
+    document.getElementById(id).value=s[id];
+  });
+}
+
+function renderHistory(){
+  const h=document.getElementById('history'); h.innerHTML='';
+  if(state.records.length===0){
+    h.innerHTML='<div class="tiny">まだ記録がありません。上で資産評価額を入力するとここに残ります。</div>'; return;
+  }
+  [...state.records].reverse().forEach((r,revIdx)=>{
+    const idx=state.records.length-1-revIdx;
+    const d=new Date(r.ts);
+    const div=document.createElement('div'); div.className='hist';
+    div.innerHTML=`<div><b>${yen(r.asset)}</b><br><small>${d.toLocaleString('ja-JP')}</small></div>
+      <button class="secondary" data-i="${idx}">削除</button>`;
+    div.querySelector('button').onclick=()=>{state.records.splice(idx,1);save();render();};
+    h.appendChild(div);
+  });
+}
+
+function renderChart(){
+  const c=document.getElementById('chart'),ctx=c.getContext('2d');
+  const W=c.width,H=c.height; ctx.clearRect(0,0,W,H);
+  const pad=34;
+  const pts=state.records.slice(-40);
+  const s=state.settings;
+  if(pts.length===0){
+    ctx.fillStyle='#6b7280';ctx.font='14px sans-serif';ctx.fillText('記録するとグラフが表示されます',20,40);return;
+  }
+  const start=parseDate(s.startDate);
+  const series=pts.map(r=>{
+    const d=new Date(r.ts); const day=Math.max(0,daysBetween(start,new Date(d.getFullYear(),d.getMonth(),d.getDate())));
+    return {actual:r.asset,plan:plannedAsset(day),label:d};
+  });
+  const vals=series.flatMap(x=>[x.actual,x.plan]);
+  let min=Math.min(...vals),max=Math.max(...vals);
+  if(min===max){min*=.95;max*=1.05}
+  const X=i=>pad+(W-2*pad)*(series.length===1?0.5:i/(series.length-1));
+  const Y=v=>H-pad-(H-2*pad)*(v-min)/(max-min);
+  ctx.strokeStyle='#e5e7eb';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad,pad);ctx.lineTo(pad,H-pad);ctx.lineTo(W-pad,H-pad);ctx.stroke();
+  function line(key,stroke,dash=[]){
+    ctx.strokeStyle=stroke;ctx.lineWidth=3;ctx.setLineDash(dash);ctx.beginPath();
+    series.forEach((p,i)=>{const x=X(i),y=Y(p[key]);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();ctx.setLineDash([]);
+  }
+  line('plan','#9ca3af',[6,5]); line('actual','#2563eb');
+  ctx.fillStyle='#2563eb';ctx.font='12px sans-serif';ctx.fillText('実績',pad,16);
+  ctx.fillStyle='#6b7280';ctx.fillText('計画',pad+50,16);
+}
+
+document.getElementById('saveBtn').onclick=addRecord;
+document.getElementById('settingsBtn').onclick=()=>{
+  const ids=['startAsset','targetAsset','dailyRate','baseUnits','baseAsset','startDate'];
+  const next={};
+  ids.forEach(id=>next[id]=id==='startDate'?document.getElementById(id).value:Number(document.getElementById(id).value));
+  if(!next.startDate || next.startAsset<=0 || next.targetAsset<=0 || next.dailyRate<=0 || next.baseUnits<=0 || next.baseAsset<=0){
+    alert('設定値を確認してください');return;
+  }
+  state.settings=next;save();render();alert('設定を保存しました');
+};
+document.getElementById('resetBtn').onclick=()=>{
+  if(confirm('すべての記録を削除しますか？')){
+    state.records=[];save();render();
+  }
+};
+document.getElementById('exportBtn').onclick=()=>{
+  const rows=[['日時','資産評価額']];
+  state.records.forEach(r=>rows.push([new Date(r.ts).toLocaleString('ja-JP'),r.asset]));
+  const csv=rows.map(x=>x.join(',')).join('\n');
+  const blob=new Blob(["\uFEFF"+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='asset-history.csv';a.click();URL.revokeObjectURL(a.href);
+};
+
+let deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault();deferredPrompt=e;
+  document.getElementById('installBtn').style.display='block';
+});
+document.getElementById('installBtn').onclick=async()=>{
+  if(!deferredPrompt)return;
+  deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;
+};
+
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));}
+render();
+</script>
+</body>
+</html>
