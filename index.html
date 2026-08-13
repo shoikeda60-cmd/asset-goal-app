@@ -49,7 +49,7 @@
 <body>
 <div class="wrap">
   <h1>100万円まであと何日？</h1>
-  <div class="sub">資産評価額を入力するだけ。残り日数・進捗・建玉・履歴を自動計算。</div>
+  <div class="sub">資産評価額を入力するだけ。土日を除いた取引日ベースで、残り日数・進捗・建玉・履歴を自動計算。</div>
 
   <div class="card hero">
     <div class="label">現在の資産評価額</div>
@@ -67,14 +67,14 @@
 
   <div class="card">
     <div class="metric">
-      <div><span class="label">100万円まで</span><b id="daysLeft">462日</b></div>
+      <div><span class="label">100万円まで</span><b id="daysLeft">462取引日</b></div>
       <div><span class="label">予想到達日</span><b id="goalDate">—</b></div>
       <div><span class="label">計画との差</span><b id="aheadBehind">0.0日</b></div>
       <div><span class="label" id="todayLabel">今日は</span><b id="todayDelta">0.0日分</b></div>
       <div><span class="label">次の建玉目安</span><b id="positionSize">10,000通貨</b></div>
       <div><span class="label">次回0.5%目標</span><b id="nextProfit">¥500</b></div>
       <div><span class="label">今日の計画資産</span><b id="plannedToday">¥100,000</b></div>
-      <div><span class="label">開始から</span><b id="elapsed">0日</b></div>
+      <div><span class="label">開始からの取引日</span><b id="elapsed">0日</b></div>
     </div>
   </div>
 
@@ -103,8 +103,23 @@
         <label>開始日<input id="startDate" type="date"></label>
       </div>
       <button class="primary" id="settingsBtn">設定を保存</button>
-      <button class="danger" id="resetBtn" style="width:100%;margin-top:10px">すべての記録を削除</button>
-      <div class="tiny" style="margin-top:10px">建玉目安は「基準資産に対して基準建玉」を比例計算し、1,000通貨単位で切り捨てます。実際の取引可能数量・リスクは口座状況により異なります。</div>
+
+      <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line)">
+        <b>クラウド同期（GitHub）</b>
+        <div class="tiny" style="margin-top:6px">
+          トークンはこのスマホ内だけに保存します。ここで入力したトークンは履歴データには書き込みません。
+        </div>
+        <label style="display:block;margin-top:10px;font-size:13px;color:var(--muted)">
+          GitHubトークン
+          <input id="githubToken" type="password" autocomplete="off" placeholder="github_pat_..." style="margin-top:5px;width:100%;padding:10px;border:1px solid var(--line);border-radius:12px">
+        </label>
+        <button class="primary" id="tokenSaveBtn">トークンをこの端末に保存</button>
+        <button class="secondary" id="syncBtn" style="width:100%;margin-top:10px">今すぐクラウド同期</button>
+        <div id="syncStatus" class="tiny" style="margin-top:8px">未設定</div>
+      </div>
+
+      <button class="danger" id="resetBtn" style="width:100%;margin-top:18px">すべての記録を削除</button>
+      <div class="tiny" style="margin-top:10px">進捗計算は土日を除いた平日のみを取引日として数えます。建玉目安は「基準資産に対して基準建玉」を比例計算し、1,000通貨単位で切り捨てます。実際の取引可能数量・リスクは口座状況により異なります。</div>
     </details>
   </div>
 
@@ -113,6 +128,11 @@
 
 <script>
 const KEY='assetGoalTrackerV1';
+const TOKEN_KEY='assetGoalGithubTokenV1';
+const GH_OWNER='shoikeda60-cmd';
+const GH_REPO='asset-goal-data';
+const GH_PATH='data.json';
+const GH_API='https://api.github.com';
 const defaultState={
   settings:{
     startAsset:100000,targetAsset:1000000,dailyRate:0.5,
@@ -134,7 +154,30 @@ const num=n=>new Intl.NumberFormat('ja-JP').format(Math.round(n));
 const dayMs=86400000;
 const parseDate=s=>new Date(s+'T00:00:00');
 const todayDate=()=>new Date(new Date().getFullYear(),new Date().getMonth(),new Date().getDate());
-function daysBetween(a,b){ return Math.floor((b-a)/dayMs); }
+function isTradingDay(d){ const w=d.getDay(); return w!==0 && w!==6; }
+// 開始日の翌日から対象日までの平日数を数える。土日は進捗日として数えない。
+function tradingDaysBetween(a,b){
+  if(b<=a) return 0;
+  let count=0;
+  const d=new Date(a.getFullYear(),a.getMonth(),a.getDate());
+  d.setDate(d.getDate()+1);
+  const end=new Date(b.getFullYear(),b.getMonth(),b.getDate());
+  while(d<=end){
+    if(isTradingDay(d)) count++;
+    d.setDate(d.getDate()+1);
+  }
+  return count;
+}
+// 今日から n 取引日後の日付。土日を自動で飛ばす。
+function addTradingDays(from,n){
+  const d=new Date(from.getFullYear(),from.getMonth(),from.getDate());
+  let left=n;
+  while(left>0){
+    d.setDate(d.getDate()+1);
+    if(isTradingDay(d)) left--;
+  }
+  return d;
+}
 function theoreticalDays(asset){
   const s=state.settings;
   if(asset<=s.startAsset) return 0;
@@ -153,6 +196,94 @@ function daysToTargetFrom(asset){
 function save(){
   localStorage.setItem(KEY,JSON.stringify(state));
 }
+function setSyncStatus(msg,kind=''){
+  const el=document.getElementById('syncStatus');
+  if(!el) return;
+  el.textContent=msg;
+  el.className='tiny'+(kind?(' '+kind):'');
+}
+function utf8ToB64(str){
+  const bytes=new TextEncoder().encode(str);
+  let bin='';
+  bytes.forEach(b=>bin+=String.fromCharCode(b));
+  return btoa(bin);
+}
+function b64ToUtf8(b64){
+  const bin=atob((b64||'').replace(/\n/g,''));
+  const bytes=Uint8Array.from(bin,c=>c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+function mergeRecords(a,b){
+  const m=new Map();
+  [...(a||[]),...(b||[])].forEach(r=>{
+    if(!r || !r.ts || !Number.isFinite(Number(r.asset))) return;
+    m.set(String(r.ts)+'|'+String(r.asset),{ts:r.ts,asset:Number(r.asset)});
+  });
+  return [...m.values()].sort((x,y)=>new Date(x.ts)-new Date(y.ts));
+}
+async function cloudSync(showAlert=false){
+  const token=localStorage.getItem(TOKEN_KEY);
+  if(!token){
+    setSyncStatus('トークン未設定');
+    if(showAlert) alert('まずGitHubトークンを保存してください');
+    return false;
+  }
+  setSyncStatus('同期中…');
+  const url=`${GH_API}/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_PATH}`;
+  const headers={
+    'Accept':'application/vnd.github+json',
+    'Authorization':`Bearer ${token}`,
+    'X-GitHub-Api-Version':'2026-03-10'
+  };
+  try{
+    let remote=null, sha=null;
+    const getRes=await fetch(url,{headers});
+    if(getRes.ok){
+      const obj=await getRes.json();
+      sha=obj.sha||null;
+      try{ remote=JSON.parse(b64ToUtf8(obj.content||'')); }catch(e){ remote=null; }
+    }else if(getRes.status!==404){
+      throw new Error(`読み込みエラー ${getRes.status}`);
+    }
+
+    if(remote && Array.isArray(remote.records)){
+      state.records=mergeRecords(state.records,remote.records);
+      save();
+      render();
+    }
+
+    const payload={
+      version:1,
+      updatedAt:new Date().toISOString(),
+      settings:state.settings,
+      records:state.records
+    };
+    const body={
+      message:'Sync asset goal data',
+      content:utf8ToB64(JSON.stringify(payload,null,2)),
+      branch:'main'
+    };
+    if(sha) body.sha=sha;
+
+    const putRes=await fetch(url,{
+      method:'PUT',
+      headers:{...headers,'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+    if(!putRes.ok){
+      const txt=await putRes.text();
+      throw new Error(`保存エラー ${putRes.status}: ${txt.slice(0,120)}`);
+    }
+    setSyncStatus(`同期済み：${new Date().toLocaleString('ja-JP')}`,'good');
+    if(showAlert) alert('クラウド同期できました。今までの記録も残っています。');
+    return true;
+  }catch(e){
+    console.error(e);
+    setSyncStatus('同期失敗：'+e.message,'bad');
+    if(showAlert) alert('同期できませんでした。トークンや権限を確認してください。');
+    return false;
+  }
+}
 function latest(){ return state.records[state.records.length-1] || null; }
 
 function addRecord(){
@@ -162,6 +293,7 @@ function addRecord(){
   save();
   document.getElementById('assetInput').value='';
   render();
+  cloudSync(false);
 }
 
 function render(){
@@ -170,15 +302,15 @@ function render(){
   const asset=rec?rec.asset:s.startAsset;
   const start=parseDate(s.startDate);
   const now=todayDate();
-  const elapsed=Math.max(0,daysBetween(start,now));
+  const elapsed=Math.max(0,tradingDaysBetween(start,now));
   const planNow=plannedAsset(elapsed);
   const achievedDay=theoreticalDays(asset);
   const ahead=achievedDay-elapsed;
   const left=daysToTargetFrom(asset);
-  const goal=new Date(now.getTime()+left*dayMs);
+  const goal=addTradingDays(now,left);
 
   document.getElementById('assetBig').textContent=yen(asset);
-  document.getElementById('daysLeft').textContent=left+'日';
+  document.getElementById('daysLeft').textContent=left+'取引日';
   document.getElementById('goalDate').textContent=goal.toLocaleDateString('ja-JP',{year:'numeric',month:'short',day:'numeric'});
   document.getElementById('plannedToday').textContent=yen(planNow);
   document.getElementById('elapsed').textContent=elapsed+'日';
@@ -214,8 +346,7 @@ function render(){
   } else if(state.records.length>=2){
     const a=state.records[state.records.length-2], b=state.records[state.records.length-1];
     delta=theoreticalDays(b.asset)-theoreticalDays(a.asset);
-    const dd=Math.max(1,Math.round((new Date(b.ts)-new Date(a.ts))/dayMs));
-    label=dd===1?'前回入力から':'前回入力から';
+    label='前回入力から';
   }
   document.getElementById('todayLabel').textContent=label;
   const td=document.getElementById('todayDelta');
@@ -257,7 +388,7 @@ function renderChart(){
   }
   const start=parseDate(s.startDate);
   const series=pts.map(r=>{
-    const d=new Date(r.ts); const day=Math.max(0,daysBetween(start,new Date(d.getFullYear(),d.getMonth(),d.getDate())));
+    const d=new Date(r.ts); const day=Math.max(0,tradingDaysBetween(start,new Date(d.getFullYear(),d.getMonth(),d.getDate())));
     return {actual:r.asset,plan:plannedAsset(day),label:d};
   });
   const vals=series.flatMap(x=>[x.actual,x.plan]);
@@ -283,8 +414,18 @@ document.getElementById('settingsBtn').onclick=()=>{
   if(!next.startDate || next.startAsset<=0 || next.targetAsset<=0 || next.dailyRate<=0 || next.baseUnits<=0 || next.baseAsset<=0){
     alert('設定値を確認してください');return;
   }
-  state.settings=next;save();render();alert('設定を保存しました');
+  state.settings=next;save();render();cloudSync(false);alert('設定を保存しました');
 };
+document.getElementById('tokenSaveBtn').onclick=async()=>{
+  const token=document.getElementById('githubToken').value.trim();
+  if(!token){alert('GitHubトークンを入力してください');return;}
+  localStorage.setItem(TOKEN_KEY,token);
+  document.getElementById('githubToken').value='';
+  setSyncStatus('トークン保存済み。初回同期を実行します…');
+  await cloudSync(true);
+};
+document.getElementById('syncBtn').onclick=()=>cloudSync(true);
+
 document.getElementById('resetBtn').onclick=()=>{
   if(confirm('すべての記録を削除しますか？')){
     state.records=[];save();render();
@@ -310,6 +451,7 @@ document.getElementById('installBtn').onclick=async()=>{
 
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));}
 render();
+setSyncStatus(localStorage.getItem(TOKEN_KEY)?'トークン保存済み（自動同期ON）':'トークン未設定');
 </script>
 </body>
 </html>
