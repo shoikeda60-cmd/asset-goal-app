@@ -6,6 +6,7 @@ on:
     paths:
       - 'tools/backtest_fx_analysis.py'
       - 'tools/backtest_fx_ml.py'
+      - 'tools/backtest_fx_precision.py'
       - 'tools/export_fx_browser_model.py'
       - '.github/workflows/backtest-fx-analysis.yml'
   workflow_dispatch:
@@ -23,15 +24,19 @@ jobs:
           node-version: '22'
       - name: Download extended USDJPY 1-minute history
         run: npx --yes dukascopy-node -i usdjpy -from 2026-01-01 -to 2026-08-15 -t m1 -f csv
-      - name: Download US 10-year Treasury yield history
-        run: curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10&cosd=2026-01-01&coed=2026-08-15' -o DGS10.csv
+      - name: Download US Treasury yield history
+        run: |
+          curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10&cosd=2026-01-01&coed=2026-08-15' -o DGS10.csv
+          curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2&cosd=2026-01-01&coed=2026-08-15' -o DGS2.csv
       - name: Install statistical model dependencies
         run: python3 -m pip install --quiet numpy scikit-learn
-      - name: Run statistical validation
+      - name: Run current statistical validation
         run: python3 tools/backtest_fx_ml.py
-      - name: Export browser model and revalidate holdout
+      - name: Run precision-first experiment
+        run: python3 tools/backtest_fx_precision.py
+      - name: Export current browser model and revalidate holdout
         run: python3 tools/export_fx_browser_model.py
-      - name: Publish browser model
+      - name: Publish current browser model
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
