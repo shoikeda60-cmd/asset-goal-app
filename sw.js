@@ -1,4 +1,4 @@
-const CACHE='asset-goal-v15-fx-analysis';
+const CACHE='asset-goal-v16-fx-mtf-rates';
 const ASSETS=['./','./index.html','./manifest.webmanifest','./cashflow.js','./delete-sync.js','./chart-axis.js','./rate-tab.js','./rate-sbi.js','./fx-analysis.js'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)))});
 self.addEventListener('activate',e=>e.waitUntil(Promise.all([
@@ -7,12 +7,12 @@ self.addEventListener('activate',e=>e.waitUntil(Promise.all([
 ])));
 function enhanceHtml(html){
   const scripts=[];
-  if(!html.includes('cashflow.js')) scripts.push('<script src="./cashflow.js?v=15"></script>');
-  if(!html.includes('delete-sync.js')) scripts.push('<script src="./delete-sync.js?v=15"></script>');
-  if(!html.includes('chart-axis.js')) scripts.push('<script src="./chart-axis.js?v=15"></script>');
-  if(!html.includes('rate-tab.js')) scripts.push('<script src="./rate-tab.js?v=15"></script>');
-  if(!html.includes('rate-sbi.js')) scripts.push('<script src="./rate-sbi.js?v=15"></script>');
-  if(!html.includes('fx-analysis.js')) scripts.push('<script src="./fx-analysis.js?v=15"></script>');
+  if(!html.includes('cashflow.js')) scripts.push('<script src="./cashflow.js?v=16"></script>');
+  if(!html.includes('delete-sync.js')) scripts.push('<script src="./delete-sync.js?v=16"></script>');
+  if(!html.includes('chart-axis.js')) scripts.push('<script src="./chart-axis.js?v=16"></script>');
+  if(!html.includes('rate-tab.js')) scripts.push('<script src="./rate-tab.js?v=16"></script>');
+  if(!html.includes('rate-sbi.js')) scripts.push('<script src="./rate-sbi.js?v=16"></script>');
+  if(!html.includes('fx-analysis.js')) scripts.push('<script src="./fx-analysis.js?v=16"></script>');
   return scripts.length?html.replace('</body>',scripts.join('')+'</body>'):html;
 }
 async function pageWithEnhancements(req){
