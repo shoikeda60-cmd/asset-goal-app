@@ -16,5 +16,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run walk-forward backtest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Download extended USDJPY 1-minute history
+        run: npx --yes dukascopy-node -i usdjpy -from 2026-01-01 -to 2026-08-15 -t m1 -f csv
+      - name: Show downloaded file
+        run: find . -type f -iname '*usdjpy*' -o -iname '*.csv' | head -20
+      - name: Run old vs new walk-forward backtest
         run: python3 tools/backtest_fx_analysis.py
