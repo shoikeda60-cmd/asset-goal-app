@@ -1,0 +1,20 @@
+name: FX Analysis Backtest
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'tools/backtest_fx_analysis.py'
+      - '.github/workflows/backtest-fx-analysis.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run walk-forward backtest
+        run: python3 tools/backtest_fx_analysis.py
