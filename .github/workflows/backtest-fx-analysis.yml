@@ -45,5 +45,6 @@ jobs:
           git add fx-model.json
           if ! git diff --cached --quiet; then
             git commit -m "Promote validated 74.91 percent FX model"
+            git pull --rebase origin main
             git push
           fi
