@@ -6,11 +6,12 @@ on:
     paths:
       - 'tools/backtest_fx_analysis.py'
       - 'tools/backtest_fx_ml.py'
+      - 'tools/export_fx_browser_model.py'
       - '.github/workflows/backtest-fx-analysis.yml'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   backtest:
@@ -24,5 +25,16 @@ jobs:
         run: npx --yes dukascopy-node -i usdjpy -from 2026-01-01 -to 2026-08-15 -t m1 -f csv
       - name: Install statistical model dependencies
         run: python3 -m pip install --quiet numpy scikit-learn
-      - name: Run statistical first-touch model
+      - name: Run statistical validation
         run: python3 tools/backtest_fx_ml.py
+      - name: Export browser model and revalidate holdout
+        run: python3 tools/export_fx_browser_model.py
+      - name: Publish browser model
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add fx-model.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update validated FX browser model"
+            git push
+          fi
