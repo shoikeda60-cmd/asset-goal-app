@@ -23,6 +23,8 @@ jobs:
           node-version: '22'
       - name: Download extended USDJPY 1-minute history
         run: npx --yes dukascopy-node -i usdjpy -from 2026-01-01 -to 2026-08-15 -t m1 -f csv
+      - name: Download US 10-year Treasury yield history
+        run: curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10&cosd=2026-01-01&coed=2026-08-15' -o DGS10.csv
       - name: Install statistical model dependencies
         run: python3 -m pip install --quiet numpy scikit-learn
       - name: Run statistical validation
