@@ -7,11 +7,9 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
-from sklearn.metrics import log_loss
 
 TARGET=5.1911590909
 START=datetime(2026,4,1,tzinfo=timezone.utc); TUNE=datetime(2026,6,1,tzinfo=timezone.utc); HOLD=datetime(2026,7,1,tzinfo=timezone.utc)
-
 def pt(v):
  s=str(v).strip().replace('Z','+00:00')
  if s.isdigit():
@@ -63,23 +61,21 @@ def reach(bs):
   for x in bs[i+1:i+31]:u|=x['h']>=base+d;dn|=x['l']<=base-d
   L+=u;S+=dn;N+=1
  return (L/N if N else .5),(S/N if N else .5)
-def label(f,base):
- d=TARGET*.01
+def outcome(f,base):
+ d=TARGET*.01;lh=any(x['h']>=base+d for x in f);sh=any(x['l']<=base-d for x in f);first='none'
  for x in f:
   u=x['h']>=base+d;dn=x['l']<=base-d
-  if u and dn:return None
-  if u:return 1
-  if dn:return 0
- return None
+  if u and dn:first='tie';break
+  if u:first='long';break
+  if dn:first='short';break
+ return first,lh,sh
 def feat(h,sc,hl,hs,t):
- c=[x['c'] for x in h];last=c[-1];ap=atr(h)/.01;rr=rsi(c)
- moms=[]
+ c=[x['c'] for x in h];last=c[-1];ap=atr(h)/.01;rr=rsi(c);moms=[]
  for n in (1,3,5,10,15,30,60):moms.append((last-c[-1-n])/(TARGET*.01) if len(c)>n else 0)
  e9=ema(c[-60:],9);e21=ema(c[-80:],21);e50=ema(c[-100:],50)
  def pos(n):
   z=c[-n:];lo=min(z);hi=max(z);return (last-lo)/(hi-lo) if hi>lo else .5
- h20=h[-20:];rng20=max(x['h'] for x in h20)-min(x['l'] for x in h20)
- hour=t.hour+t.minute/60;ang=2*math.pi*hour/24;dow=t.weekday();dang=2*math.pi*dow/5
+ h20=h[-20:];rng20=max(x['h'] for x in h20)-min(x['l'] for x in h20);hour=t.hour+t.minute/60;ang=2*math.pi*hour/24;dow=t.weekday();dang=2*math.pi*dow/5
  rate=3.625-(1.0 if t>=datetime(2026,6,17,tzinfo=timezone.utc) else .75)
  return sc+[hl,hs,hl-hs,ap/TARGET,(rr-50)/25,(last-e9)/(TARGET*.01),(e9-e21)/(TARGET*.01),(e21-e50)/(TARGET*.01),pos(20)-.5,pos(60)-.5,rng20/(TARGET*.01)]+moms+[math.sin(ang),math.cos(ang),math.sin(dang),math.cos(dang),rate/3]
 def build():
@@ -88,38 +84,36 @@ def build():
  while i<len(m1)-31:
   t=m1[i]['t'];e=bisect_right(tm,t+timedelta(minutes=30));f=m1[i+1:e]
   if len(f)>=20:
-   y=label(f,m1[i]['c'])
-   if y is not None:
-    h=m1[max(0,i-1440):i+1];hl,hs=reach(h);sc=[]
-    for k in (1,5,15,60,240,1440):j=bisect_right(sts[k],t);sc.append(score(ser[k][max(0,j-100):j]))
-    rows.append((t,feat(h,sc,hl,hs,t),y))
+   h=m1[max(0,i-1440):i+1];hl,hs=reach(h);sc=[]
+   for k in (1,5,15,60,240,1440):j=bisect_right(sts[k],t);sc.append(score(ser[k][max(0,j-100):j]))
+   first,lh,sh=outcome(f,m1[i]['c']);rows.append({'t':t,'x':feat(h,sc,hl,hs,t),'first':first,'lh':lh,'sh':sh})
   i+=15
  return m1,rows
+def training(rows):
+ z=[r for r in rows if r['first'] in ('long','short')];return np.array([r['x'] for r in z]),np.array([1 if r['first']=='long' else 0 for r in z])
 def metric(model,rows,thr):
- if not rows:return {'n':0,'win':0,'coverage':0,'long':0,'short':0}
- X=np.array([r[1] for r in rows]);y=np.array([r[2] for r in rows]);p=model.predict_proba(X)[:,1]
- take=(p>=thr)|(p<=1-thr);pred=(p>=.5).astype(int);n=int(take.sum());win=float((pred[take]==y[take]).mean()*100) if n else 0
- return {'n':n,'win':win,'coverage':float(n/len(rows)*100),'long':int(((pred==1)&take).sum()),'short':int(((pred==0)&take).sum()),'avg_conf':float(np.maximum(p[take],1-p[take]).mean()*100) if n else 0}
+ if not rows:return {}
+ X=np.array([r['x'] for r in rows]);p=model.predict_proba(X)[:,1];take=(p>=thr)|(p<=1-thr);pred=np.where(p>=.5,'long','short');idx=np.where(take)[0];n=len(idx)
+ if not n:return {'signals':0}
+ strict=hit=decwin=dec=0;L=S=0
+ for i in idx:
+  r=rows[i];sd=pred[i];L+=sd=='long';S+=sd=='short';strict+=r['first']==sd;hit+=r['lh'] if sd=='long' else r['sh']
+  if r['first'] in ('long','short'):dec+=1;decwin+=r['first']==sd
+ return {'signals':n,'coverage_all_pct':100*n/len(rows),'strict_first_touch_success_pct':100*strict/n,'target_hit_30m_pct':100*hit/n,'decisive_accuracy_pct':100*decwin/dec if dec else 0,'decisive_selected':dec,'long':L,'short':S,'avg_conf_pct':100*float(np.maximum(p[idx],1-p[idx]).mean())}
 def main():
- m1,rows=build();tr=[r for r in rows if r[0]<TUNE];tu=[r for r in rows if TUNE<=r[0]<HOLD];ho=[r for r in rows if r[0]>=HOLD]
- X=np.array([r[1] for r in tr]);y=np.array([r[2] for r in tr])
- models={
-  'logistic':make_pipeline(StandardScaler(),LogisticRegression(C=.35,max_iter=2000,class_weight='balanced')),
-  'histgb':HistGradientBoostingClassifier(max_iter=180,learning_rate=.045,max_depth=3,min_samples_leaf=35,l2_regularization=3,random_state=7),
-  'rf':RandomForestClassifier(n_estimators=180,max_depth=6,min_samples_leaf=20,max_features=.65,class_weight='balanced_subsample',random_state=7,n_jobs=-1)
- }
- best=None;detail={}
+ m1,rows=build();tr=[r for r in rows if r['t']<TUNE];tu=[r for r in rows if TUNE<=r['t']<HOLD];ho=[r for r in rows if r['t']>=HOLD];X,y=training(tr)
+ models={'logistic':make_pipeline(StandardScaler(),LogisticRegression(C=.35,max_iter=2000,class_weight='balanced')),'histgb':HistGradientBoostingClassifier(max_iter=180,learning_rate=.045,max_depth=3,min_samples_leaf=35,l2_regularization=3,random_state=7),'rf':RandomForestClassifier(n_estimators=180,max_depth=6,min_samples_leaf=20,max_features=.65,class_weight='balanced_subsample',random_state=7,n_jobs=-1)}
+ best=None;grid={}
  for name,m in models.items():
-  m.fit(X,y);detail[name]={}
-  for th in (.50,.52,.54,.56,.58,.60,.62,.65,.68,.70,.72):
-   z=metric(m,tu,th);detail[name][str(th)]=z
-   if z['n']<150 or z['coverage']<12 or min(z['long'],z['short'])<30:continue
-   obj=z['win']+min(z['coverage'],35)*.025
+  m.fit(X,y);grid[name]={}
+  for th in (.50,.52,.54,.56,.58,.60,.62,.65,.68,.70,.72,.75,.78,.80):
+   z=metric(m,tu,th);grid[name][str(th)]=z
+   if z.get('signals',0)<180 or z.get('coverage_all_pct',0)<10 or min(z.get('long',0),z.get('short',0))<30:continue
+   obj=z['strict_first_touch_success_pct']+z['target_hit_30m_pct']*.15+min(z['coverage_all_pct'],30)*.02
    if best is None or obj>best[0]:best=(obj,name,m,th,z)
  if best is None:raise RuntimeError('no model')
  _,name,m,th,tz=best;hz=metric(m,ho,th);trz=metric(m,tr,th)
- base_models={}
- for n,mm in models.items():base_models[n]={'tune_050':metric(mm,tu,.50),'holdout_050':metric(mm,ho,.50)}
- out={'data':{'bars':len(m1),'train_decisive':len(tr),'tune_decisive':len(tu),'holdout_decisive':len(ho),'features':len(tr[0][1])},'selected':{'model':name,'threshold':th,'train':trz,'tune':tz,'holdout':hz},'all_models_base':base_models,'tune_grid':detail,'note':'Apr-May training, June threshold/model selection, Jul-Aug untouched holdout. Target is which side reaches 5.191 pips first within 30 minutes; ties/none excluded.'}
- print('ML_RESULT_JSON');print(json.dumps(out,ensure_ascii=False,indent=2))
+ allbase={n:{'tune_050':metric(mm,tu,.50),'holdout_050':metric(mm,ho,.50)} for n,mm in models.items()}
+ out={'data':{'bars':len(m1),'train_all':len(tr),'tune_all':len(tu),'holdout_all':len(ho),'train_decisive':len(training(tr)[1]),'tune_decisive':len(training(tu)[1]),'holdout_decisive':len(training(ho)[1]),'features':len(tr[0]['x'])},'selected':{'model':name,'threshold':th,'train':trz,'tune':tz,'holdout':hz},'all_models_base':allbase,'tune_grid':grid,'note':'Apr-May training, June model/threshold selection, Jul-Aug untouched holdout. strict_first_touch_success counts no-touch/tie as failure; target_hit_30m measures whether predicted-direction target was reached at any point within 30 minutes.'}
+ print('ML_ALL_STATES_RESULT_JSON');print(json.dumps(out,ensure_ascii=False,indent=2))
 if __name__=='__main__':main()
