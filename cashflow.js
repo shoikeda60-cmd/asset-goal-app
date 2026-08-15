@@ -97,6 +97,42 @@
     const b=document.createElement('div'); b.innerHTML='<span class="label">純利益</span><b id="pureProfit">¥0</b>'; metric.appendChild(b);
   }
 
+  const assetChart=document.getElementById('chart');
+  const assetChartCard=assetChart?.closest('.card');
+  if(assetChartCard && !document.getElementById('profitChart')){
+    const profitCard=document.createElement('div');
+    profitCard.className='card';
+    profitCard.innerHTML='<div class="row"><b>利益推移</b><span class="label">純利益（入出金を除く）</span></div><canvas id="profitChart" width="700" height="220"></canvas>';
+    assetChartCard.insertAdjacentElement('afterend',profitCard);
+  }
+
+  function renderProfitChart(){
+    const c=document.getElementById('profitChart');
+    if(!c) return;
+    const ctx=c.getContext('2d');
+    const W=c.width,H=c.height; ctx.clearRect(0,0,W,H);
+    const pad=34;
+    const pts=state.records.slice(-40);
+    const s=state.settings;
+    if(pts.length===0){
+      ctx.fillStyle='#6b7280';ctx.font='14px sans-serif';ctx.fillText('記録するとグラフが表示されます',20,40);return;
+    }
+    const series=pts.map(r=>({profit:Number(r.asset)-Number(s.startAsset)-totalCashflowUntil(r.ts),label:new Date(r.ts)}));
+    const vals=series.map(x=>x.profit);
+    let min=Math.min(...vals,0),max=Math.max(...vals,0);
+    if(min===max){min-=1000;max+=1000;}
+    const X=i=>pad+(W-2*pad)*(series.length===1?0.5:i/(series.length-1));
+    const Y=v=>H-pad-(H-2*pad)*(v-min)/(max-min);
+    ctx.strokeStyle='#e5e7eb';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad,pad);ctx.lineTo(pad,H-pad);ctx.lineTo(W-pad,H-pad);ctx.stroke();
+    const zeroY=Y(0);
+    ctx.strokeStyle='#d1d5db';ctx.setLineDash([5,5]);ctx.beginPath();ctx.moveTo(pad,zeroY);ctx.lineTo(W-pad,zeroY);ctx.stroke();ctx.setLineDash([]);
+    ctx.strokeStyle='#2563eb';ctx.lineWidth=3;ctx.beginPath();
+    series.forEach((p,i)=>{const x=X(i),y=Y(p.profit);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
+    ctx.stroke();
+    ctx.fillStyle='#2563eb';ctx.font='12px sans-serif';ctx.fillText('純利益',pad,16);
+    ctx.fillStyle='#6b7280';ctx.fillText('0円',W-pad-26,Math.max(12,zeroY-6));
+  }
+
   cloudSync = async function(showAlert=false){
     const token=localStorage.getItem(TOKEN_KEY);
     if(!token){ setSyncStatus('トークン未設定'); if(showAlert) alert('まずGitHubトークンを保存してください'); return false; }
@@ -188,6 +224,7 @@
     const st=document.getElementById('statusText');
     if(st && asset<state.settings.targetAsset){ if(ahead>0.05) st.textContent='🟢 計画より '+ahead.toFixed(1)+'日先行'; else if(ahead<-0.05) st.textContent='🔴 計画より '+Math.abs(ahead).toFixed(1)+'日遅れ'; else st.textContent='予定どおり進行中'; }
     enhanceHistory();
+    renderProfitChart();
   };
 
   render();
