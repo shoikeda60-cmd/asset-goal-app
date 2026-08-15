@@ -1,4 +1,4 @@
-const CACHE='asset-goal-v6-history-breakdown';
+const CACHE='asset-goal-v7-profit-chart';
 const ASSETS=['./','./index.html','./manifest.webmanifest','./cashflow.js'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)))});
 self.addEventListener('activate',e=>e.waitUntil(Promise.all([
@@ -9,13 +9,13 @@ async function pageWithCashflow(req){
   try{
     const r=await fetch(req,{cache:'no-store'});
     let html=await r.text();
-    if(!html.includes('cashflow.js')) html=html.replace('</body>','<script src="./cashflow.js?v=6"></script></body>');
+    if(!html.includes('cashflow.js')) html=html.replace('</body>','<script src="./cashflow.js?v=7"></script></body>');
     return new Response(html,{status:r.status,statusText:r.statusText,headers:{'Content-Type':'text/html; charset=utf-8'}});
   }catch(e){
     const cached=await caches.match('./index.html');
     if(!cached) throw e;
     let html=await cached.text();
-    if(!html.includes('cashflow.js')) html=html.replace('</body>','<script src="./cashflow.js?v=6"></script></body>');
+    if(!html.includes('cashflow.js')) html=html.replace('</body>','<script src="./cashflow.js?v=7"></script></body>');
     return new Response(html,{headers:{'Content-Type':'text/html; charset=utf-8'}});
   }
 }
