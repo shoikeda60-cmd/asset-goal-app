@@ -7,20 +7,17 @@ on:
       - 'tools/backtest_fx_analysis.py'
       - 'tools/backtest_fx_ml.py'
       - 'tools/backtest_fx_precision.py'
-      - 'tools/export_fx_browser_model.py'
       - '.github/workflows/backtest-fx-analysis.yml'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   backtest:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -36,16 +33,6 @@ jobs:
         run: python3 tools/backtest_fx_ml.py
       - name: Run precision-first experiment
         run: python3 tools/backtest_fx_precision.py
-      - name: Restore accepted production model
-        run: |
-          git show 83f60b1a8fd9ebf1130d5301ff8544405bb7cefb:fx-model.json > fx-model.json
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add fx-model.json
-          if ! git diff --cached --quiet; then
-            git commit -m "Restore accepted 70.74 percent FX model"
-            git push
-          fi
 
-# Research runs never publish a newly trained model automatically.
-# A model is promoted only after its untouched holdout result clears the acceptance bar.
+# Research runs are read-only. They never overwrite fx-model.json automatically.
+# Production promotion is a separate explicit change after untouched holdout validation.
