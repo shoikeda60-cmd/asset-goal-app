@@ -1,47 +1,45 @@
 {
-  "generated_at": "2026-08-15T17:12:11Z",
+  "generated_at": "2026-08-15T17:37:24Z",
   "data": {
-    "bars": 2914,
-    "from": "2026-02-27T23:28:00",
-    "to": "2026-03-04T00:04:00",
+    "source": "Dukascopy USDJPY bid M1 via dukascopy-node",
+    "bars": 274014,
+    "from": "2026-01-01T00:00:00Z",
+    "to": "2026-08-14T20:59:00Z",
+    "test_start": "2026-04-01T00:00:00Z",
+    "step_minutes": 15,
     "target_pips": 5.191,
-    "test_points": 2484
+    "test_points": 10971
   },
-  "baseline": {
-    "long_hit_pct": 66.0,
-    "short_hit_pct": 61.2
-  },
-  "signals": {
-    "count": 2074,
-    "target_hit_pct": 61.3,
-    "opposite_target_hit_pct": 66.4,
-    "first_touch_decisive_count": 2056,
-    "first_touch_win_pct": 48.7,
-    "first_touch_tie_count": 2,
-    "first_touch_none_count": 16,
-    "long_count": 1437,
-    "short_count": 637
-  },
-  "strength": {
-    "56-61": {"n": 713, "target_hit_pct": 54.1, "first_touch_win_pct": 44.7},
-    "62-69": {"n": 914, "target_hit_pct": 67.8, "first_touch_win_pct": 55.7},
-    "70+": {"n": 447, "target_hit_pct": 59.5, "first_touch_win_pct": 40.9}
-  },
-  "calibration": {
-    "long": {
-      "<50": {"n": 703, "avg_pred": 40.1, "actual_pct": 67.9},
-      "50-59": {"n": 624, "avg_pred": 54.9, "actual_pct": 61.2},
-      "60-69": {"n": 737, "avg_pred": 65.2, "actual_pct": 71.0},
-      "70-79": {"n": 416, "avg_pred": 72.8, "actual_pct": 61.5},
-      "80-85": {"n": 4, "avg_pred": 80.0, "actual_pct": 25.0}
-    },
-    "short": {
-      "<50": {"n": 1521, "avg_pred": 38.4, "actual_pct": 66.5},
-      "50-59": {"n": 543, "avg_pred": 54.5, "actual_pct": 53.6},
-      "60-69": {"n": 393, "avg_pred": 64.1, "actual_pct": 52.7},
-      "70-79": {"n": 27, "avg_pred": 70.5, "actual_pct": 33.3}
+  "old_4tf": {
+    "signal_count": 4557,
+    "coverage_pct": 41.54,
+    "target_hit_pct": 40.47,
+    "opposite_target_hit_pct": 30.77,
+    "first_touch_decisive_count": 2737,
+    "first_touch_win_pct": 58.71,
+    "long_signals": 2642,
+    "short_signals": 1915,
+    "strength": {
+      "56-61": {"n": 2724, "first_touch_win_pct": 59.70, "target_hit_pct": 31.98},
+      "62-69": {"n": 1503, "first_touch_win_pct": 59.45, "target_hit_pct": 49.83},
+      "70+": {"n": 330, "first_touch_win_pct": 51.37, "target_hit_pct": 67.88}
     }
   },
-  "interpretation": "Preliminary only. Current displayed probabilities are not well calibrated. The 62-69 signal band performed best in this sample; 70+ was worse. First-touch compares +target and -target within 30 clock minutes. No stop-loss or transaction costs are included.",
-  "source": "public USDJPY 1-minute OHLC dataset from simonnmarket/OMEGA_OS_Kernel"
+  "new_6tf_rates": {
+    "signal_count": 4480,
+    "coverage_pct": 40.83,
+    "target_hit_pct": 38.21,
+    "opposite_target_hit_pct": 30.60,
+    "first_touch_decisive_count": 2631,
+    "first_touch_win_pct": 56.63,
+    "long_signals": 3771,
+    "short_signals": 709,
+    "strength": {
+      "56-61": {"n": 2512, "first_touch_win_pct": 55.19, "target_hit_pct": 33.12},
+      "62-69": {"n": 1695, "first_touch_win_pct": 58.83, "target_hit_pct": 41.47},
+      "70+": {"n": 273, "first_touch_win_pct": 54.95, "target_hit_pct": 64.84}
+    }
+  },
+  "improvement_first_touch_pp": -2.08,
+  "interpretation": "The current six-timeframe plus policy-rate-differential weighting did not improve first-touch directional accuracy on this extended sample. It reduced first-touch win rate by 2.08 percentage points and produced a much stronger long bias. The longer timeframes and rate differential may still be useful features, but their present weights need retuning and out-of-sample validation before treating the change as an improvement."
 }
