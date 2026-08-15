@@ -4,6 +4,8 @@
 
   const POLICY={usLow:3.50,usHigh:3.75,jp:1.00,asOf:'2026-08-16'};
   const rateDiff=((POLICY.usLow+POLICY.usHigh)/2)-POLICY.jp;
+  const MODEL_WEIGHTS=[.0806,.1290,.3871,.2581,.0645,.0806];
+  const RATE_COEFF=1.5;
 
   const style=document.createElement('style');
   style.textContent=`
@@ -32,7 +34,7 @@
         <div class="fxa-card"><div class="fxa-label">ショート到達確率</div><div class="fxa-value bad" id="fxaShort">--%</div></div>
       </div>
       <div class="fxa-main"><div class="fxa-label">現在の判定（30分以内）</div><div class="fxa-signal" id="fxaSignal">分析待ち</div><div class="fxa-reasons" id="fxaReasons"></div><div class="fxa-bars" id="fxaBars"></div></div>
-      <div class="fxa-note">1分・5分・15分・1時間・4時間・日足を同時評価し、EMA・RSI・ATR・モメンタム・過去到達率に加えて日米政策金利差も補助材料として使用します。金利差は長期バイアスであり、短期チャートより弱く効かせています。将来の値動きを保証するものではなく、売買注文は行いません。</div>`;
+      <div class="fxa-note">1分・5分・15分・1時間・4時間・日足を同時評価し、EMA・RSI・ATR・モメンタム・過去到達率と日米政策金利差を使用します。重みは2026年4〜6月を学習、7〜8月を検証期間としてバックテスト調整済みです。将来の値動きを保証するものではなく、売買注文は行いません。</div>`;
     toolbar.insertAdjacentElement('beforebegin',panel);
     start();
   }
@@ -49,14 +51,13 @@
   function analyze(series){
     const pips=Math.max(.1,targetPips());
     const scores=[tfScore(series.m1),tfScore(series.m5),tfScore(series.m15),tfScore(series.h1),tfScore(series.h4),tfScore(series.d1)];
-    const weights=[.08,.12,.18,.22,.22,.18];
-    let dir=scores.reduce((a,v,i)=>a+v*weights[i],0);
+    let dir=scores.reduce((a,v,i)=>a+v*MODEL_WEIGHTS[i],0);
     const rateBias=clamp(rateDiff/3,-1,1);
     const hist=historicalReach(series.m1,pips,30);
     const a=atr(series.m1,14)/.01;
     const reach=clamp(a>0?(a*Math.sqrt(30/14))/pips:1,.55,1.45);
-    let long=50+dir*22+(hist.long-.5)*22+(reach-1)*10+rateBias*4;
-    let short=50-dir*22+(hist.short-.5)*22+(reach-1)*10-rateBias*4;
+    let long=50+dir*22+(hist.long-.5)*22+(reach-1)*10+rateBias*RATE_COEFF;
+    let short=50-dir*22+(hist.short-.5)*22+(reach-1)*10-rateBias*RATE_COEFF;
     long=Math.round(clamp(long,15,85));short=Math.round(clamp(short,15,85));
     const reasons=[];
     const labels=['1分','5分','15分','1時間','4時間','日足'];
