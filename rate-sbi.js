@@ -39,5 +39,5 @@
     const s=document.createElement('script');s.src='https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';s.async=true;s.textContent=JSON.stringify({autosize:true,symbol:'FX:USDJPY',interval,timezone:'Asia/Tokyo',theme:'dark',style:'1',locale:'ja',backgroundColor:'#0b1530',gridColor:'rgba(148,163,184,0.18)',hide_top_toolbar:true,hide_side_toolbar:true,hide_legend:false,hide_volume:true,allow_symbol_change:false,save_image:false,withdateranges:false,calendar:false,studies:['STD;Bollinger_Bands','STD;Moving_Average']});wrap.appendChild(s);
   }
   page.querySelectorAll('#sbiPeriods button').forEach(b=>b.onclick=()=>{interval=b.dataset.i;page.querySelectorAll('#sbiPeriods button').forEach(x=>x.classList.toggle('active',x===b));loaded='';load();});
-  window.AssetGoalTabs.register({id:'sbi',label:'SBI風',element:page,onShow:load});
+  window.AssetGoalTabs.register({id:'sbi',label:'ドル円チャート',element:page,onShow:load});
 })();
