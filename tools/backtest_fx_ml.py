@@ -93,13 +93,16 @@ def metric(rm,dm,rows,rth,dth):
  for i in idx:
   r=rows[i];sd=pred[i];L+=sd=='long';S+=sd=='short';strict+=r['first']==sd;hit+=r['lh'] if sd=='long' else r['sh'];dec+=r['first'] in ('long','short');decwin+=r['first']==sd if r['first'] in ('long','short') else 0
  return {'signals':n,'coverage_all_pct':100*n/len(rows),'strict_first_touch_success_pct':100*strict/n,'target_hit_30m_pct':100*hit/n,'decisive_accuracy_pct':100*decwin/dec if dec else 0,'decisive_selected':dec,'long':L,'short':S,'avg_reach_prob_pct':100*float(rp[idx].mean()),'avg_dir_conf_pct':100*float(np.maximum(dp[idx],1-dp[idx]).mean())}
+def export_log(pipe):
+ sc=pipe.named_steps['standardscaler'];lr=pipe.named_steps['logisticregression']
+ return {'mean':[float(x) for x in sc.mean_],'scale':[float(x) for x in sc.scale_],'coef':[float(x) for x in lr.coef_[0]],'intercept':float(lr.intercept_[0])}
 def main():
  m1,rows=build();tr=[r for r in rows if r['t']<TUNE];tu=[r for r in rows if TUNE<=r['t']<HOLD];ho=[r for r in rows if r['t']>=HOLD];Xr,yr=arr(tr,'reach');Xd,yd=arr(tr,'dir')
  reachmods={'reach_hgb':HistGradientBoostingClassifier(max_iter=180,learning_rate=.045,max_depth=3,min_samples_leaf=35,l2_regularization=3,random_state=11),'reach_rf':RandomForestClassifier(n_estimators=180,max_depth=6,min_samples_leaf=20,max_features=.65,class_weight='balanced_subsample',random_state=11,n_jobs=-1),'reach_log':make_pipeline(StandardScaler(),LogisticRegression(C=.35,max_iter=2000,class_weight='balanced'))}
- dirmods={'dir_hgb':HistGradientBoostingClassifier(max_iter=180,learning_rate=.045,max_depth=3,min_samples_leaf=35,l2_regularization=3,random_state=7),'dir_rf':RandomForestClassifier(n_estimators=180,max_depth=6,min_samples_leaf=20,max_features=.65,class_weight='balanced_subsample',random_state=7,n_jobs=-1)}
+ dirmods={'dir_hgb':HistGradientBoostingClassifier(max_iter=180,learning_rate=.045,max_depth=3,min_samples_leaf=35,l2_regularization=3,random_state=7),'dir_rf':RandomForestClassifier(n_estimators=180,max_depth=6,min_samples_leaf=20,max_features=.65,class_weight='balanced_subsample',random_state=7,n_jobs=-1),'dir_log':make_pipeline(StandardScaler(),LogisticRegression(C=.35,max_iter=2000,class_weight='balanced'))}
  for m in reachmods.values():m.fit(Xr,yr)
  for m in dirmods.values():m.fit(Xd,yd)
- best=None;grid=[]
+ best=None;portable=None;grid=[]
  for rn,rm in reachmods.items():
   for dn,dm in dirmods.items():
    for rth in (.45,.50,.55,.60,.65,.70,.75,.80):
@@ -109,9 +112,13 @@ def main():
      obj=z['target_hit_30m_pct']*.55+z['strict_first_touch_success_pct']*.40+min(z['coverage_all_pct'],25)*.05
      grid.append((obj,rn,dn,rth,dth,z))
      if best is None or obj>best[0]:best=(obj,rn,dn,rth,dth,z)
- if best is None:raise RuntimeError('no model')
- _,rn,dn,rth,dth,tz=best;rm=reachmods[rn];dm=dirmods[dn];hz=metric(rm,dm,ho,rth,dth);trz=metric(rm,dm,tr,rth,dth)
+     if rn=='reach_log' and dn=='dir_log' and (portable is None or obj>portable[0]):portable=(obj,rn,dn,rth,dth,z)
+ if best is None or portable is None:raise RuntimeError('no model')
+ def pack(item):
+  _,rn,dn,rth,dth,tz=item;rm=reachmods[rn];dm=dirmods[dn]
+  return {'reach_model':rn,'dir_model':dn,'reach_threshold':rth,'dir_threshold':dth,'train':metric(rm,dm,tr,rth,dth),'tune':tz,'holdout':metric(rm,dm,ho,rth,dth)}
+ selected=pack(best);port=pack(portable);port['reach_params']=export_log(reachmods['reach_log']);port['dir_params']=export_log(dirmods['dir_log'])
  grid.sort(reverse=True,key=lambda x:x[0]);top=[{'reach_model':x[1],'dir_model':x[2],'reach_threshold':x[3],'dir_threshold':x[4],'tune':x[5]} for x in grid[:10]]
- out={'data':{'bars':len(m1),'train_all':len(tr),'tune_all':len(tu),'holdout_all':len(ho),'features':len(tr[0]['x'])},'selected':{'reach_model':rn,'dir_model':dn,'reach_threshold':rth,'dir_threshold':dth,'train':trz,'tune':tz,'holdout':hz},'top_tune_candidates':top,'note':'Two-stage model: probability any target is reachable, then conditional direction. Apr-May train, June select thresholds/models, Jul-Aug untouched holdout.'}
- print('TWO_STAGE_RESULT_JSON');print(json.dumps(out,ensure_ascii=False,indent=2))
+ out={'data':{'bars':len(m1),'train_all':len(tr),'tune_all':len(tu),'holdout_all':len(ho),'features':len(tr[0]['x'])},'selected':selected,'portable_best':port,'top_tune_candidates':top,'note':'Portable model uses StandardScaler + logistic regression for both stages so it can be embedded in browser JS. Apr-May train, June model/threshold selection, Jul-Aug untouched holdout.'}
+ print('PORTABLE_TWO_STAGE_RESULT_JSON');print(json.dumps(out,ensure_ascii=False,indent=2))
 if __name__=='__main__':main()
