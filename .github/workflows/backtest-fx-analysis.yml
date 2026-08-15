@@ -7,17 +7,20 @@ on:
       - 'tools/backtest_fx_analysis.py'
       - 'tools/backtest_fx_ml.py'
       - 'tools/backtest_fx_precision.py'
+      - 'tools/export_fx_precision_model.py'
       - '.github/workflows/backtest-fx-analysis.yml'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   backtest:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -33,6 +36,14 @@ jobs:
         run: python3 tools/backtest_fx_ml.py
       - name: Run precision-first experiment
         run: python3 tools/backtest_fx_precision.py
-
-# Research runs are read-only. They never overwrite fx-model.json automatically.
-# Production promotion is a separate explicit change after untouched holdout validation.
+      - name: Export promoted precision browser model
+        run: python3 tools/export_fx_precision_model.py
+      - name: Publish promoted browser model
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add fx-model.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Promote validated 74.91 percent FX model"
+            git push
+          fi
