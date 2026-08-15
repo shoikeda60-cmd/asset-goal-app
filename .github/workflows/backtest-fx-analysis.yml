@@ -24,7 +24,5 @@ jobs:
         run: npx --yes dukascopy-node -i usdjpy -from 2026-01-01 -to 2026-08-15 -t m1 -f csv
       - name: Install statistical model dependencies
         run: python3 -m pip install --quiet numpy scikit-learn
-      - name: Run heuristic optimization
-        run: python3 tools/backtest_fx_analysis.py
       - name: Run statistical first-touch model
         run: python3 tools/backtest_fx_ml.py
