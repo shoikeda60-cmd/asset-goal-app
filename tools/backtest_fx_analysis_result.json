@@ -1,0 +1,47 @@
+{
+  "generated_at": "2026-08-15T17:12:11Z",
+  "data": {
+    "bars": 2914,
+    "from": "2026-02-27T23:28:00",
+    "to": "2026-03-04T00:04:00",
+    "target_pips": 5.191,
+    "test_points": 2484
+  },
+  "baseline": {
+    "long_hit_pct": 66.0,
+    "short_hit_pct": 61.2
+  },
+  "signals": {
+    "count": 2074,
+    "target_hit_pct": 61.3,
+    "opposite_target_hit_pct": 66.4,
+    "first_touch_decisive_count": 2056,
+    "first_touch_win_pct": 48.7,
+    "first_touch_tie_count": 2,
+    "first_touch_none_count": 16,
+    "long_count": 1437,
+    "short_count": 637
+  },
+  "strength": {
+    "56-61": {"n": 713, "target_hit_pct": 54.1, "first_touch_win_pct": 44.7},
+    "62-69": {"n": 914, "target_hit_pct": 67.8, "first_touch_win_pct": 55.7},
+    "70+": {"n": 447, "target_hit_pct": 59.5, "first_touch_win_pct": 40.9}
+  },
+  "calibration": {
+    "long": {
+      "<50": {"n": 703, "avg_pred": 40.1, "actual_pct": 67.9},
+      "50-59": {"n": 624, "avg_pred": 54.9, "actual_pct": 61.2},
+      "60-69": {"n": 737, "avg_pred": 65.2, "actual_pct": 71.0},
+      "70-79": {"n": 416, "avg_pred": 72.8, "actual_pct": 61.5},
+      "80-85": {"n": 4, "avg_pred": 80.0, "actual_pct": 25.0}
+    },
+    "short": {
+      "<50": {"n": 1521, "avg_pred": 38.4, "actual_pct": 66.5},
+      "50-59": {"n": 543, "avg_pred": 54.5, "actual_pct": 53.6},
+      "60-69": {"n": 393, "avg_pred": 64.1, "actual_pct": 52.7},
+      "70-79": {"n": 27, "avg_pred": 70.5, "actual_pct": 33.3}
+    }
+  },
+  "interpretation": "Preliminary only. Current displayed probabilities are not well calibrated. The 62-69 signal band performed best in this sample; 70+ was worse. First-touch compares +target and -target within 30 clock minutes. No stop-loss or transaction costs are included.",
+  "source": "public USDJPY 1-minute OHLC dataset from simonnmarket/OMEGA_OS_Kernel"
+}
