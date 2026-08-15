@@ -104,7 +104,7 @@ def bucket(p):
 
 def main():
     bars=load(); rows=[]
-    # 400 bars is enough for 15m regime and historical-reach calibration; production 1h score stays neutral under 1d window.
+    # Walk-forward only: prediction at i uses data through i, then evaluates unseen future bars.
     for i in range(400,len(bars)-HORIZON):
         hist=bars[max(0,i-MAX_HISTORY+1):i+1]
         lp,sp,scores=analyze(hist,TARGET_PIPS)
