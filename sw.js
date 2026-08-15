@@ -1,5 +1,5 @@
-const CACHE='asset-goal-v12-fx-two-tabs';
-const ASSETS=['./','./index.html','./manifest.webmanifest','./cashflow.js','./chart-axis.js','./rate-tab.js','./rate-sbi.js'];
+const CACHE='asset-goal-v13-delete-sync';
+const ASSETS=['./','./index.html','./manifest.webmanifest','./cashflow.js','./delete-sync.js','./chart-axis.js','./rate-tab.js','./rate-sbi.js'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)))});
 self.addEventListener('activate',e=>e.waitUntil(Promise.all([
   caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))),
@@ -7,10 +7,11 @@ self.addEventListener('activate',e=>e.waitUntil(Promise.all([
 ])));
 function enhanceHtml(html){
   const scripts=[];
-  if(!html.includes('cashflow.js')) scripts.push('<script src="./cashflow.js?v=12"></script>');
-  if(!html.includes('chart-axis.js')) scripts.push('<script src="./chart-axis.js?v=12"></script>');
-  if(!html.includes('rate-tab.js')) scripts.push('<script src="./rate-tab.js?v=12"></script>');
-  if(!html.includes('rate-sbi.js')) scripts.push('<script src="./rate-sbi.js?v=12"></script>');
+  if(!html.includes('cashflow.js')) scripts.push('<script src="./cashflow.js?v=13"></script>');
+  if(!html.includes('delete-sync.js')) scripts.push('<script src="./delete-sync.js?v=13"></script>');
+  if(!html.includes('chart-axis.js')) scripts.push('<script src="./chart-axis.js?v=13"></script>');
+  if(!html.includes('rate-tab.js')) scripts.push('<script src="./rate-tab.js?v=13"></script>');
+  if(!html.includes('rate-sbi.js')) scripts.push('<script src="./rate-sbi.js?v=13"></script>');
   return scripts.length?html.replace('</body>',scripts.join('')+'</body>'):html;
 }
 async function pageWithEnhancements(req){
@@ -31,7 +32,7 @@ self.addEventListener('fetch',e=>{
     return;
   }
   const path=new URL(e.request.url).pathname;
-  if(path.endsWith('/cashflow.js')||path.endsWith('/chart-axis.js')||path.endsWith('/rate-tab.js')||path.endsWith('/rate-sbi.js')){
+  if(path.endsWith('/cashflow.js')||path.endsWith('/delete-sync.js')||path.endsWith('/chart-axis.js')||path.endsWith('/rate-tab.js')||path.endsWith('/rate-sbi.js')){
     e.respondWith(fetch(e.request,{cache:'no-store'}).then(r=>{
       const c=r.clone();
       caches.open(CACHE).then(cache=>cache.put(e.request,c));
