@@ -1,26 +1,20 @@
-name: FX Analysis Backtest
+name: FX Target Pips Experiment
 
 on:
   push:
-    branches: [ main ]
+    branches: [ 'experiment/target-pips-3-4-519' ]
     paths:
-      - 'tools/backtest_fx_analysis.py'
-      - 'tools/backtest_fx_ml.py'
-      - 'tools/backtest_fx_precision.py'
-      - 'tools/export_fx_precision_model.py'
       - '.github/workflows/backtest-fx-analysis.yml'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  backtest:
+  compare-targets:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -30,21 +24,93 @@ jobs:
         run: |
           curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10&cosd=2026-01-01&coed=2026-08-15' -o DGS10.csv
           curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2&cosd=2026-01-01&coed=2026-08-15' -o DGS2.csv
-      - name: Install statistical model dependencies
+      - name: Install model dependencies
         run: python3 -m pip install --quiet numpy scikit-learn
-      - name: Run current statistical validation
-        run: python3 tools/backtest_fx_ml.py
-      - name: Run precision-first experiment
-        run: python3 tools/backtest_fx_precision.py
-      - name: Export promoted precision browser model
-        run: python3 tools/export_fx_precision_model.py
-      - name: Publish promoted browser model
+      - name: Compare 3, 4 and 5.191159 pip outcomes on identical production signals
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add fx-model.json
-          if ! git diff --cached --quiet; then
-            git commit -m "Promote validated 74.91 percent FX model"
-            git pull --rebase origin main
-            git push
-          fi
+          python3 - <<'PY'
+          import json
+          from bisect import bisect_right
+          from datetime import timedelta
+          import numpy as np
+          from sklearn.pipeline import make_pipeline
+          from sklearn.preprocessing import StandardScaler
+          from sklearn.linear_model import LogisticRegression
+          from sklearn.ensemble import HistGradientBoostingClassifier
+          import sys
+          sys.path.insert(0, 'tools')
+          import backtest_fx_ml as bt
+          import backtest_fx_precision as px
+
+          m1, rows = bt.build()
+          d2 = px.load_yield('DGS2.csv')
+          d10 = px.load_yield('DGS10.csv')
+          for r in rows:
+              r['xp'] = r['x'] + px.macro_extra(r['t'], d2, d10)
+
+          train = [r for r in rows if r['t'] < bt.TUNE]
+          hold = [r for r in rows if r['t'] >= bt.HOLD]
+
+          Xr, yr = px.arr(train, 'reach')
+          Xd, yd = px.arr(train, 'dir')
+          reach = make_pipeline(
+              StandardScaler(),
+              LogisticRegression(C=.35, max_iter=2500, class_weight='balanced')
+          ).fit(Xr, yr)
+          direction = HistGradientBoostingClassifier(
+              max_iter=220, learning_rate=.04, max_depth=3,
+              min_samples_leaf=35, l2_regularization=4, random_state=17
+          ).fit(Xd, yd)
+
+          Xh = np.array([r['xp'] for r in hold])
+          rp = reach.predict_proba(Xh)[:, 1]
+          dp = direction.predict_proba(Xh)[:, 1]
+          selected = [i for i in range(len(hold)) if rp[i] >= .50 and max(dp[i], 1-dp[i]) >= .60]
+
+          times = [b['t'] for b in m1]
+
+          def result_for(pips):
+              d = pips * .01
+              hit = 0
+              strict = 0
+              ties = 0
+              long_n = 0
+              short_n = 0
+              for i in selected:
+                  r = hold[i]
+                  side = 'long' if dp[i] >= .5 else 'short'
+                  long_n += side == 'long'
+                  short_n += side == 'short'
+                  j = bisect_right(times, r['t'])
+                  e = bisect_right(times, r['t'] + timedelta(minutes=30))
+                  fut = m1[j:e]
+                  base = m1[j-1]['c']
+                  long_hit = any(x['h'] >= base + d for x in fut)
+                  short_hit = any(x['l'] <= base - d for x in fut)
+                  hit += long_hit if side == 'long' else short_hit
+                  first = 'none'
+                  for x in fut:
+                      u = x['h'] >= base + d
+                      dn = x['l'] <= base - d
+                      if u and dn:
+                          first = 'tie'; ties += 1; break
+                      if u:
+                          first = 'long'; break
+                      if dn:
+                          first = 'short'; break
+                  strict += first == side
+              n = len(selected)
+              return {
+                  'pips': pips,
+                  'signals': n,
+                  'target_hit_30m_pct': 100*hit/n,
+                  'strict_first_touch_success_pct': 100*strict/n,
+                  'ties': ties,
+                  'long': long_n,
+                  'short': short_n,
+              }
+
+          results = [result_for(x) for x in (3.0, 4.0, bt.TARGET)]
+          print('TARGET_PIPS_COMPARISON_JSON')
+          print(json.dumps(results, indent=2))
+          PY
