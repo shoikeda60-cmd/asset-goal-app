@@ -1,4 +1,4 @@
-name: FX 2025 Early-Period Experiment
+name: FX 2025 Full-Year Monthly Experiment
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  test-2025-early:
+  test-2025-full-year:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,17 +19,17 @@ jobs:
         with:
           node-version: '22'
       - name: Download USDJPY 1-minute history
-        run: npx --yes dukascopy-node -i usdjpy -from 2024-12-01 -to 2025-05-01 -t m1 -f csv
+        run: npx --yes dukascopy-node -i usdjpy -from 2024-12-01 -to 2026-01-01 -t m1 -f csv
       - name: Download Treasury histories
         run: |
-          curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10&cosd=2024-11-01&coed=2025-05-01' -o DGS10.csv
-          curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2&cosd=2024-11-01&coed=2025-05-01' -o DGS2.csv
+          curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10&cosd=2024-11-01&coed=2026-01-01' -o DGS10.csv
+          curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2&cosd=2024-11-01&coed=2026-01-01' -o DGS2.csv
       - name: Install dependencies
         run: python3 -m pip install --quiet numpy scikit-learn
-      - name: Evaluate exact promoted model on Jan-Apr 2025
+      - name: Evaluate exact promoted model month by month for 2025
         run: |
           python3 - <<'PY'
-          import json, math, sys
+          import json, math, sys, calendar
           from bisect import bisect_right
           from datetime import datetime, timezone, timedelta
           sys.path.insert(0, 'tools')
@@ -37,23 +37,44 @@ jobs:
           import backtest_fx_precision as px
 
           bt.START = datetime(2025,1,1,tzinfo=timezone.utc)
-          bt.TUNE = datetime(2025,5,1,tzinfo=timezone.utc)
-          bt.HOLD = datetime(2025,5,1,tzinfo=timezone.utc)
+          bt.TUNE = datetime(2026,1,1,tzinfo=timezone.utc)
+          bt.HOLD = datetime(2026,1,1,tzinfo=timezone.utc)
+
           bt.CPI_EVENTS = [
               datetime(2025,1,15,13,30,tzinfo=timezone.utc),
               datetime(2025,2,12,13,30,tzinfo=timezone.utc),
               datetime(2025,3,12,12,30,tzinfo=timezone.utc),
               datetime(2025,4,10,12,30,tzinfo=timezone.utc),
+              datetime(2025,5,13,12,30,tzinfo=timezone.utc),
+              datetime(2025,6,11,12,30,tzinfo=timezone.utc),
+              datetime(2025,7,15,12,30,tzinfo=timezone.utc),
+              datetime(2025,8,12,12,30,tzinfo=timezone.utc),
+              datetime(2025,9,11,12,30,tzinfo=timezone.utc),
+              datetime(2025,10,24,12,30,tzinfo=timezone.utc),
+              datetime(2025,12,18,13,30,tzinfo=timezone.utc),
           ]
           bt.NFP_EVENTS = [
               datetime(2025,1,10,13,30,tzinfo=timezone.utc),
               datetime(2025,2,7,13,30,tzinfo=timezone.utc),
               datetime(2025,3,7,13,30,tzinfo=timezone.utc),
               datetime(2025,4,4,12,30,tzinfo=timezone.utc),
+              datetime(2025,5,2,12,30,tzinfo=timezone.utc),
+              datetime(2025,6,6,12,30,tzinfo=timezone.utc),
+              datetime(2025,7,3,12,30,tzinfo=timezone.utc),
+              datetime(2025,8,1,12,30,tzinfo=timezone.utc),
+              datetime(2025,9,5,12,30,tzinfo=timezone.utc),
+              datetime(2025,11,20,13,30,tzinfo=timezone.utc),
+              datetime(2025,12,16,13,30,tzinfo=timezone.utc),
           ]
           bt.FOMC_EVENTS = [
               datetime(2025,1,29,19,0,tzinfo=timezone.utc),
               datetime(2025,3,19,18,0,tzinfo=timezone.utc),
+              datetime(2025,5,7,18,0,tzinfo=timezone.utc),
+              datetime(2025,6,18,18,0,tzinfo=timezone.utc),
+              datetime(2025,7,30,18,0,tzinfo=timezone.utc),
+              datetime(2025,9,17,18,0,tzinfo=timezone.utc),
+              datetime(2025,10,29,18,0,tzinfo=timezone.utc),
+              datetime(2025,12,10,19,0,tzinfo=timezone.utc),
           ]
           bt.MAJOR_EVENTS = sorted(bt.CPI_EVENTS + bt.NFP_EVENTS + bt.FOMC_EVENTS)
 
@@ -63,10 +84,23 @@ jobs:
           m1, rows = bt.build()
           d10 = px.load_yield('DGS10.csv')
           d2 = px.load_yield('DGS2.csv')
-          boJ_hike = datetime(2025,1,24,tzinfo=timezone.utc)
+
+          boj_hike = datetime(2025,1,24,tzinfo=timezone.utc)
+          fed_sep = datetime(2025,9,17,18,0,tzinfo=timezone.utc)
+          fed_oct = datetime(2025,10,29,18,0,tzinfo=timezone.utc)
+          fed_dec = datetime(2025,12,10,19,0,tzinfo=timezone.utc)
+
           for r in rows:
-              boj = 0.25 if r['t'] < boJ_hike else 0.5
-              r['x'][29] = (4.375 - boj) / 3.0
+              boj = 0.25 if r['t'] < boj_hike else 0.5
+              if r['t'] < fed_sep:
+                  fed_mid = 4.375
+              elif r['t'] < fed_oct:
+                  fed_mid = 4.125
+              elif r['t'] < fed_dec:
+                  fed_mid = 3.875
+              else:
+                  fed_mid = 3.625
+              r['x'][29] = (fed_mid - boj) / 3.0
               r['xp'] = r['x'] + px.macro_extra(r['t'], d2, d10)
 
           def logistic(m, x):
@@ -91,11 +125,6 @@ jobs:
               return 1/(1+math.exp(-raw))
 
           times = [b['t'] for b in m1]
-          periods = [
-              ('2025-01-01..2025-02-28', datetime(2025,1,1,tzinfo=timezone.utc), datetime(2025,3,1,tzinfo=timezone.utc)),
-              ('2025-03-01..2025-04-30', datetime(2025,3,1,tzinfo=timezone.utc), datetime(2025,5,1,tzinfo=timezone.utc)),
-              ('2025-01-01..2025-04-30 ALL', datetime(2025,1,1,tzinfo=timezone.utc), datetime(2025,5,1,tzinfo=timezone.utc)),
-          ]
 
           def evaluate(subrows, pips):
               rp = [logistic(model['reach'], r['xp']) for r in subrows]
@@ -108,7 +137,10 @@ jobs:
                   side = 'long' if dp[i] >= .5 else 'short'
                   long_n += side == 'long'; short_n += side == 'short'
                   j = bisect_right(times, r['t']); e = bisect_right(times, r['t']+timedelta(minutes=30))
-                  fut = m1[j:e]; base = m1[j-1]['c']
+                  fut = m1[j:e]
+                  if not fut or j == 0:
+                      continue
+                  base = m1[j-1]['c']
                   lh = any(x['h'] >= base+d for x in fut); sh = any(x['l'] <= base-d for x in fut)
                   hit += lh if side == 'long' else sh
                   first = 'none'
@@ -130,9 +162,24 @@ jobs:
               }
 
           out=[]
-          for label,start,end in periods:
+          for month in range(1,13):
+              start = datetime(2025,month,1,tzinfo=timezone.utc)
+              end = datetime(2026,1,1,tzinfo=timezone.utc) if month == 12 else datetime(2025,month+1,1,tzinfo=timezone.utc)
               sub=[r for r in rows if start <= r['t'] < end]
-              out.append({'period':label,'rows':len(sub),'pips_3':evaluate(sub,3.0),'pips_5_191159':evaluate(sub,model['target_pips_reference'])})
-          print('EARLY_2025_JSON')
-          print(json.dumps(out,indent=2))
+              out.append({
+                  'month': f'2025-{month:02d}',
+                  'rows': len(sub),
+                  'pips_3': evaluate(sub,3.0),
+                  'pips_5_191159': evaluate(sub,model['target_pips_reference'])
+              })
+
+          allrows=[r for r in rows if datetime(2025,1,1,tzinfo=timezone.utc) <= r['t'] < datetime(2026,1,1,tzinfo=timezone.utc)]
+          summary={
+              'period':'2025 ALL',
+              'rows':len(allrows),
+              'pips_3':evaluate(allrows,3.0),
+              'pips_5_191159':evaluate(allrows,model['target_pips_reference'])
+          }
+          print('FULL_YEAR_2025_MONTHLY_JSON')
+          print(json.dumps({'months':out,'summary':summary},indent=2))
           PY
