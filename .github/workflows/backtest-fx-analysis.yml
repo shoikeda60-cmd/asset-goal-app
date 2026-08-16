@@ -23,94 +23,77 @@ jobs:
       - name: Download US Treasury yield history
         run: |
           curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10&cosd=2026-01-01&coed=2026-08-15' -o DGS10.csv
-          curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2&cosd=2026-01-01&coed=2026-08-15' -o DGS2.csv
-      - name: Install model dependencies
-        run: python3 -m pip install --quiet numpy scikit-learn
-      - name: Compare 3, 4 and 5.191159 pip outcomes on identical production signals
+      - name: Install dependency
+        run: python3 -m pip install --quiet numpy
+      - name: Compare targets using exact promoted fx-model.json
         run: |
           python3 - <<'PY'
-          import json
+          import json, math, sys
           from bisect import bisect_right
-          from datetime import timedelta
+          from datetime import timedelta, date
           import numpy as np
-          from sklearn.pipeline import make_pipeline
-          from sklearn.preprocessing import StandardScaler
-          from sklearn.linear_model import LogisticRegression
-          from sklearn.ensemble import HistGradientBoostingClassifier
-          import sys
           sys.path.insert(0, 'tools')
           import backtest_fx_ml as bt
           import backtest_fx_precision as px
 
+          with open('fx-model.json', encoding='utf-8') as f:
+              model = json.load(f)
+
           m1, rows = bt.build()
-          d2 = px.load_yield('DGS2.csv')
           d10 = px.load_yield('DGS10.csv')
+          d2 = [(date.fromisoformat(x['date']), float(x['value'])) for x in model['dgs2']]
           for r in rows:
               r['xp'] = r['x'] + px.macro_extra(r['t'], d2, d10)
-
-          train = [r for r in rows if r['t'] < bt.TUNE]
           hold = [r for r in rows if r['t'] >= bt.HOLD]
 
-          Xr, yr = px.arr(train, 'reach')
-          Xd, yd = px.arr(train, 'dir')
-          reach = make_pipeline(
-              StandardScaler(),
-              LogisticRegression(C=.35, max_iter=2500, class_weight='balanced')
-          ).fit(Xr, yr)
-          direction = HistGradientBoostingClassifier(
-              max_iter=220, learning_rate=.04, max_depth=3,
-              min_samples_leaf=35, l2_regularization=4, random_state=17
-          ).fit(Xd, yd)
+          def logistic(m, x):
+              z = m['intercept']
+              for i, v in enumerate(x):
+                  z += ((v-m['mean'][i])/(m['scale'][i] or 1.0))*m['coef'][i]
+              z = max(-40, min(40, z))
+              return 1/(1+math.exp(-z))
 
-          Xh = np.array([r['xp'] for r in hold])
-          rp = reach.predict_proba(Xh)[:, 1]
-          dp = direction.predict_proba(Xh)[:, 1]
-          selected = [i for i in range(len(hold)) if rp[i] >= .50 and max(dp[i], 1-dp[i]) >= .60]
+          def hgb(m, x):
+              raw = m['baseline']
+              for nodes in m['trees']:
+                  i = 0
+                  while not nodes[i]['leaf']:
+                      n = nodes[i]; v = x[n['f']]
+                      if not math.isfinite(v):
+                          i = n['l'] if n['ml'] else n['r']
+                      else:
+                          i = n['l'] if v <= n['t'] else n['r']
+                  raw += nodes[i]['v']
+              raw = max(-40, min(40, raw))
+              return 1/(1+math.exp(-raw))
 
+          rp = [logistic(model['reach'], r['xp']) for r in hold]
+          dp = [hgb(model['direction'], r['xp']) for r in hold]
+          selected = [i for i in range(len(hold)) if rp[i] >= model['thresholds']['reach'] and max(dp[i],1-dp[i]) >= model['thresholds']['direction']]
           times = [b['t'] for b in m1]
 
           def result_for(pips):
-              d = pips * .01
-              hit = 0
-              strict = 0
-              ties = 0
-              long_n = 0
-              short_n = 0
+              d = pips*.01
+              hit = strict = ties = long_n = short_n = 0
               for i in selected:
                   r = hold[i]
                   side = 'long' if dp[i] >= .5 else 'short'
-                  long_n += side == 'long'
-                  short_n += side == 'short'
-                  j = bisect_right(times, r['t'])
-                  e = bisect_right(times, r['t'] + timedelta(minutes=30))
-                  fut = m1[j:e]
-                  base = m1[j-1]['c']
-                  long_hit = any(x['h'] >= base + d for x in fut)
-                  short_hit = any(x['l'] <= base - d for x in fut)
-                  hit += long_hit if side == 'long' else short_hit
+                  long_n += side == 'long'; short_n += side == 'short'
+                  j = bisect_right(times, r['t']); e = bisect_right(times, r['t']+timedelta(minutes=30))
+                  fut = m1[j:e]; base = m1[j-1]['c']
+                  lh = any(x['h'] >= base+d for x in fut); sh = any(x['l'] <= base-d for x in fut)
+                  hit += lh if side == 'long' else sh
                   first = 'none'
                   for x in fut:
-                      u = x['h'] >= base + d
-                      dn = x['l'] <= base - d
-                      if u and dn:
-                          first = 'tie'; ties += 1; break
-                      if u:
-                          first = 'long'; break
-                      if dn:
-                          first = 'short'; break
+                      u = x['h'] >= base+d; dn = x['l'] <= base-d
+                      if u and dn: first='tie'; ties += 1; break
+                      if u: first='long'; break
+                      if dn: first='short'; break
                   strict += first == side
               n = len(selected)
-              return {
-                  'pips': pips,
-                  'signals': n,
-                  'target_hit_30m_pct': 100*hit/n,
-                  'strict_first_touch_success_pct': 100*strict/n,
-                  'ties': ties,
-                  'long': long_n,
-                  'short': short_n,
-              }
+              return {'pips':pips,'signals':n,'target_hit_30m_pct':100*hit/n,'strict_first_touch_success_pct':100*strict/n,'ties':ties,'long':long_n,'short':short_n}
 
-          results = [result_for(x) for x in (3.0, 4.0, bt.TARGET)]
-          print('TARGET_PIPS_COMPARISON_JSON')
-          print(json.dumps(results, indent=2))
+          results=[result_for(x) for x in (3.0,4.0,model['target_pips_reference'])]
+          print('EXACT_MODEL_TARGET_PIPS_COMPARISON_JSON')
+          print(json.dumps(results,indent=2))
           PY
