@@ -5,7 +5,7 @@
       return sum + (c.type==='withdrawal' ? -Number(c.amount) : Number(c.amount));
     },0);
   }
-  function adjustedAssetAxis(asset,ts=null){ return Number(asset)-totalCashflowUntilAxis(ts); }
+  function adjustedAssetAxis(asset,ts=null){ return Number(asset); }
   function formatAxisYen(v){
     const sign=v<0?'-':'';
     const n=Math.abs(Math.round(v));
