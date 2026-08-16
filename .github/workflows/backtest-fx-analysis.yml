@@ -1,4 +1,4 @@
-name: FX Period Robustness Experiment
+name: FX 2025 Out-of-Time Experiment
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  compare-periods:
+  test-2025:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,14 +19,14 @@ jobs:
         with:
           node-version: '22'
       - name: Download USDJPY 1-minute history
-        run: npx --yes dukascopy-node -i usdjpy -from 2026-01-01 -to 2026-08-15 -t m1 -f csv
+        run: npx --yes dukascopy-node -i usdjpy -from 2025-06-01 -to 2025-09-01 -t m1 -f csv
       - name: Download Treasury histories
         run: |
-          curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10&cosd=2026-01-01&coed=2026-08-15' -o DGS10.csv
-          curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2&cosd=2026-01-01&coed=2026-08-15' -o DGS2.csv
+          curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10&cosd=2025-05-01&coed=2025-09-01' -o DGS10.csv
+          curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2&cosd=2025-05-01&coed=2025-09-01' -o DGS2.csv
       - name: Install dependencies
         run: python3 -m pip install --quiet numpy scikit-learn
-      - name: Evaluate exact promoted model by period
+      - name: Evaluate exact promoted model on Jul-Aug 2025
         run: |
           python3 - <<'PY'
           import json, math, sys
@@ -36,6 +36,21 @@ jobs:
           import backtest_fx_ml as bt
           import backtest_fx_precision as px
 
+          # Reconstruct Jul-Aug 2025 inputs using only information available then.
+          bt.START = datetime(2025,7,1,tzinfo=timezone.utc)
+          bt.TUNE = datetime(2025,9,1,tzinfo=timezone.utc)
+          bt.HOLD = datetime(2025,9,1,tzinfo=timezone.utc)
+          bt.CPI_EVENTS = [
+              datetime(2025,7,15,12,30,tzinfo=timezone.utc),
+              datetime(2025,8,12,12,30,tzinfo=timezone.utc),
+          ]
+          bt.NFP_EVENTS = [
+              datetime(2025,7,3,12,30,tzinfo=timezone.utc),
+              datetime(2025,8,1,12,30,tzinfo=timezone.utc),
+          ]
+          bt.FOMC_EVENTS = [datetime(2025,7,30,18,0,tzinfo=timezone.utc)]
+          bt.MAJOR_EVENTS = sorted(bt.CPI_EVENTS + bt.NFP_EVENTS + bt.FOMC_EVENTS)
+
           with open('fx-model.json', encoding='utf-8') as f:
               model = json.load(f)
 
@@ -43,6 +58,9 @@ jobs:
           d10 = px.load_yield('DGS10.csv')
           d2 = px.load_yield('DGS2.csv')
           for r in rows:
+              # Jul-Aug 2025: Fed target midpoint 4.375%, BOJ policy rate 0.5%.
+              # Replace the hard-coded 2026 policy-difference feature with the historical value.
+              r['x'][29] = (4.375 - 0.5) / 3.0
               r['xp'] = r['x'] + px.macro_extra(r['t'], d2, d10)
 
           def logistic(m, x):
@@ -68,16 +86,12 @@ jobs:
 
           times = [b['t'] for b in m1]
           periods = [
-              ('2026-04-01..2026-05-31 TRAIN', datetime(2026,4,1,tzinfo=timezone.utc), datetime(2026,6,1,tzinfo=timezone.utc)),
-              ('2026-06-01..2026-06-30 TUNE', datetime(2026,6,1,tzinfo=timezone.utc), datetime(2026,7,1,tzinfo=timezone.utc)),
-              ('2026-07-01..2026-07-31 HOLDOUT', datetime(2026,7,1,tzinfo=timezone.utc), datetime(2026,8,1,tzinfo=timezone.utc)),
-              ('2026-08-01..2026-08-14 HOLDOUT', datetime(2026,8,1,tzinfo=timezone.utc), datetime(2026,8,15,tzinfo=timezone.utc)),
-              ('2026-07-01..2026-08-14 HOLDOUT ALL', datetime(2026,7,1,tzinfo=timezone.utc), datetime(2026,8,15,tzinfo=timezone.utc)),
+              ('2025-07-01..2025-07-31', datetime(2025,7,1,tzinfo=timezone.utc), datetime(2025,8,1,tzinfo=timezone.utc)),
+              ('2025-08-01..2025-08-31', datetime(2025,8,1,tzinfo=timezone.utc), datetime(2025,9,1,tzinfo=timezone.utc)),
+              ('2025-07-01..2025-08-31 ALL', datetime(2025,7,1,tzinfo=timezone.utc), datetime(2025,9,1,tzinfo=timezone.utc)),
           ]
 
           def evaluate(subrows, pips):
-              if not subrows:
-                  return {'signals':0}
               rp = [logistic(model['reach'], r['xp']) for r in subrows]
               dp = [hgb(model['direction'], r['xp']) for r in subrows]
               selected = [i for i in range(len(subrows)) if rp[i] >= model['thresholds']['reach'] and max(dp[i],1-dp[i]) >= model['thresholds']['direction']]
@@ -101,7 +115,7 @@ jobs:
               n = len(selected)
               return {
                   'signals': n,
-                  'coverage_pct': 100*n/len(subrows),
+                  'coverage_pct': 100*n/len(subrows) if subrows else 0,
                   'target_hit_30m_pct': 100*hit/n if n else 0,
                   'strict_first_touch_success_pct': 100*strict/n if n else 0,
                   'ties': ties,
@@ -113,6 +127,6 @@ jobs:
           for label,start,end in periods:
               sub=[r for r in rows if start <= r['t'] < end]
               out.append({'period':label,'rows':len(sub),'pips_3':evaluate(sub,3.0),'pips_5_191159':evaluate(sub,model['target_pips_reference'])})
-          print('PERIOD_ROBUSTNESS_JSON')
+          print('OUT_OF_TIME_2025_JSON')
           print(json.dumps(out,indent=2))
           PY
