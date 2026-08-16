@@ -1,18 +1,107 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>小学2年生 漢字テスト</title><style>*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;background:linear-gradient(#fff8e8,#eef8ff);color:#222;min-height:100vh}.wrap{max-width:760px;margin:auto;padding:16px}.card{background:#fff;border-radius:24px;box-shadow:0 12px 30px #0001;padding:18px;margin-bottom:16px}h1{font-size:clamp(24px,6vw,36px);margin:0}.top{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}.pill,.badge{border-radius:999px;padding:7px 11px;font-weight:800}.pill{background:#f3f4f6}.badge{background:#e8f4ff;color:#1769aa;font-size:12px}.q{margin:16px 0 8px;padding:15px;background:#fff7cc;border-radius:18px;font-size:clamp(22px,5vw,32px);font-weight:800}.hint,.small{color:#6b7280;font-size:13px}.cw{display:flex;justify-content:center;margin:15px 0}canvas{width:min(82vw,420px);aspect-ratio:1;background:#fff;border:4px solid #333;border-radius:16px;touch-action:none}.buttons{display:grid;grid-template-columns:1fr 1fr;gap:10px}button{border:0;border-radius:16px;padding:15px;font-size:18px;font-weight:800}#clear{background:#e5e7eb}#judge{background:#219ebc;color:#fff}#next{grid-column:1/-1;background:#ffb703}.result{text-align:center;min-height:56px;font-size:25px;font-weight:900;margin-top:12px}.ok{color:#2a9d8f}.ng{color:#e63946}.ans{text-align:center;font-size:48px;font-weight:900}.finish{display:none;text-align:center}.finish.show{display:block}.score{font-size:56px;font-weight:1000;color:#15616d}.restart{width:100%;background:#219ebc;color:#fff;margin-top:14px}.checks{margin-top:10px;text-align:left;font-size:14px;line-height:1.65}.good{color:#18794e}.bad{color:#c1121f}.warn{color:#9a6700}.loading{color:#1769aa}.footer{font-size:11px;color:#888;line-height:1.5}</style></head><body><div class="wrap"><div class="card" id="quiz"><div class="top"><h1>小学2年生 漢字テスト</h1><div class="pill"><span id="n">1</span>/10もん</div></div><div class="q" id="q"></div><div class="hint">したの ますに タッチペンで、1かくずつ かいてね。</div><div class="badge">自動判定：手書きの形を優先＋明らかなミスだけ×</div><div class="cw"><canvas id="c" width="600" height="600"></canvas></div><div class="buttons"><button id="clear">けす</button><button id="judge">じどうで はんてい</button><button id="next">つぎのもんだい</button></div><div id="result" class="result"></div><div id="ans" class="ans"></div><div id="detail" class="small" style="text-align:center"></div><div id="checks" class="checks"></div></div><div class="card finish" id="finish"><h2>おしまい！</h2><div id="score" class="score"></div><div id="msg"></div><button class="restart" onclick="location.reload()">もういちど</button></div><div class="card footer">子どもの手書き特有の傾き・長さ・位置ずれは大きく許容します。画数の大違い、明らかな別字、明確な書き順・終筆ミスだけ不正解にします。</div></div><script>
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>小学2年生 漢字テスト</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;background:linear-gradient(#fff8e8,#eef8ff);color:#222;min-height:100vh}
+.wrap{max-width:760px;margin:auto;padding:16px}
+.card{background:#fff;border-radius:24px;box-shadow:0 12px 30px #0001;padding:18px;margin-bottom:16px}
+h1{font-size:clamp(24px,6vw,36px);margin:0}
+.top{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+.pill,.badge{border-radius:999px;padding:7px 11px;font-weight:800}
+.pill{background:#f3f4f6}
+.badge{background:#e8f4ff;color:#1769aa;font-size:12px}
+.q{margin:16px 0 8px;padding:15px;background:#fff7cc;border-radius:18px;font-size:clamp(22px,5vw,32px);font-weight:800}
+.hint,.small{color:#6b7280;font-size:13px}
+.cw{display:flex;justify-content:center;margin:15px 0}
+canvas{width:min(82vw,420px);aspect-ratio:1;background:#fff;border:4px solid #333;border-radius:16px;touch-action:none}
+.buttons{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{border:0;border-radius:16px;padding:15px;font-size:18px;font-weight:800}
+#clear{background:#e5e7eb}
+#judge{background:#219ebc;color:#fff}
+#next{grid-column:1/-1;background:#ffb703}
+.result{text-align:center;min-height:56px;font-size:25px;font-weight:900;margin-top:12px}
+.ok{color:#2a9d8f}.ng{color:#e63946}.loading{color:#1769aa}
+.ans{text-align:center;font-size:48px;font-weight:900}
+.finish{display:none;text-align:center}.finish.show{display:block}
+.score{font-size:56px;font-weight:1000;color:#15616d}
+.restart{width:100%;background:#219ebc;color:#fff;margin-top:14px}
+.checks{margin-top:10px;text-align:left;font-size:14px;line-height:1.65}
+.good{color:#18794e}.bad{color:#c1121f}.warn{color:#9a6700}
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;margin-top:8px;color:#555}
+.dot{display:inline-block;width:12px;height:12px;border-radius:999px;vertical-align:middle;margin-right:4px}
+.footer{font-size:11px;color:#888;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card" id="quiz">
+    <div class="top">
+      <h1>小学2年生 漢字テスト</h1>
+      <div class="pill"><span id="n">1</span>/10もん</div>
+    </div>
+    <div class="q" id="q"></div>
+    <div class="hint">タッチペンで 1かくずつ かいてね。とちゅうでは判定せず、さいごにまとめて見るよ。</div>
+    <div class="badge">総合判定：各画の情報を保存 → 最後にまとめて判定</div>
+    <div class="cw"><canvas id="c" width="600" height="600"></canvas></div>
+    <div class="buttons">
+      <button id="clear">けす</button>
+      <button id="judge">じどうで はんてい</button>
+      <button id="next">つぎのもんだい</button>
+    </div>
+    <div id="result" class="result"></div>
+    <div id="ans" class="ans"></div>
+    <div id="detail" class="small" style="text-align:center"></div>
+    <div id="checks" class="checks"></div>
+    <div class="legend"><span><span class="dot" style="background:#111"></span>ふつう</span><span><span class="dot" style="background:#e63946"></span>まちがい</span><span><span class="dot" style="background:#f4a261"></span>すこし気になる</span></div>
+  </div>
+  <div class="card finish" id="finish">
+    <h2>おしまい！</h2>
+    <div id="score" class="score"></div>
+    <div id="msg"></div>
+    <button class="restart" onclick="location.reload()">もういちど</button>
+  </div>
+  <div class="card footer">字全体の形を重視しつつ、各画の向き・位置・終わり方を最後にまとめて見ます。書き順は完全一致を必須にせず、近い画どうしを自動で対応づけて判定します。</div>
+</div>
+<script>
 const pool=[['はる','春'],['なつ','夏'],['あき','秋'],['ふゆ','冬'],['そら','空'],['うみ','海'],['やま','山'],['かわ','川'],['くも','雲'],['ゆき','雪'],['かぜ','風'],['ひかり','光'],['ほし','星'],['あさ','朝'],['ひる','昼'],['よる','夜'],['みち','道'],['くに','国'],['とも','友'],['おや','親'],['ちち','父'],['はは','母'],['あに','兄'],['あね','姉'],['おとうと','弟'],['いもうと','妹'],['みせ','店'],['かう','買'],['うる','売']];
-const qs=[...pool].sort(()=>Math.random()-.5).slice(0,10);let i=0,score=0,judged=false,drawing=false,current=null,strokes=[];const c=document.getElementById('c'),x=c.getContext('2d'),q=document.getElementById('q'),n=document.getElementById('n'),res=document.getElementById('result'),ans=document.getElementById('ans'),detail=document.getElementById('detail'),checks=document.getElementById('checks');
-function guide(){x.fillStyle='#fff';x.fillRect(0,0,600,600);x.save();x.strokeStyle='#d1d5db';x.lineWidth=2;x.setLineDash([12,12]);x.beginPath();x.moveTo(300,0);x.lineTo(300,600);x.moveTo(0,300);x.lineTo(600,300);x.stroke();x.restore()}
-function p(e){let r=c.getBoundingClientRect();return{x:(e.clientX-r.left)*600/r.width,y:(e.clientY-r.top)*600/r.height,t:performance.now(),pressure:e.pressure||.5}}
-c.onpointerdown=e=>{if(judged)return;drawing=true;c.setPointerCapture(e.pointerId);current=[p(e)]};c.onpointermove=e=>{if(!drawing||judged)return;let a=p(e),last=current[current.length-1];x.strokeStyle='#111';x.lineCap='round';x.lineJoin='round';x.lineWidth=14+a.pressure*14;x.beginPath();x.moveTo(last.x,last.y);x.lineTo(a.x,a.y);x.stroke();current.push(a)};function endStroke(e){if(!drawing)return;drawing=false;if(current&&current.length>1){if(e&&e.clientX!=null)current.push(p(e));strokes.push(current)}current=null}c.onpointerup=endStroke;c.onpointercancel=endStroke;
-function clearAll(){guide();judged=false;strokes=[];current=null;res.textContent='';res.className='result';ans.textContent='';detail.textContent='';checks.innerHTML=''}document.getElementById('clear').onclick=clearAll;function load(){clearAll();n.textContent=i+1;q.textContent=`『${qs[i][0]}』を かんじで かきましょう。`;preload(qs[i][1])}load();
-const refCache=new Map();function hex5(ch){return ch.codePointAt(0).toString(16).padStart(5,'0')}async function preload(ch){if(refCache.has(ch))return refCache.get(ch);try{const r=await fetch(`https://raw.githubusercontent.com/KanjiVG/kanjivg/master/kanji/${hex5(ch)}.svg`,{cache:'force-cache'});if(!r.ok)throw 0;const txt=await r.text(),doc=new DOMParser().parseFromString(txt,'image/svg+xml'),paths=[...doc.querySelectorAll('path[id*="-s"]')],refs=paths.map(el=>sampleSvgPath(el.getAttribute('d')));refCache.set(ch,refs);return refs}catch(e){refCache.set(ch,null);return null}}
-function sampleSvgPath(d){const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg'),path=document.createElementNS(ns,'path');path.setAttribute('d',d);svg.appendChild(path);svg.style.position='absolute';svg.style.left='-9999px';document.body.appendChild(svg);const L=path.getTotalLength(),pts=[];for(let k=0;k<40;k++){let a=path.getPointAtLength(L*k/39);pts.push({x:a.x,y:a.y})}svg.remove();return pts}
-function resample(poly,N=40){if(poly.length<2)return poly;let lens=[0];for(let j=1;j<poly.length;j++)lens.push(lens[j-1]+Math.hypot(poly[j].x-poly[j-1].x,poly[j].y-poly[j-1].y));let total=lens.at(-1);if(total<1)return poly;let out=[];for(let k=0;k<N;k++){let target=total*k/(N-1),j=1;while(j<lens.length&&lens[j]<target)j++;if(j>=lens.length){out.push({...poly.at(-1)});continue}let a=poly[j-1],b=poly[j],span=lens[j]-lens[j-1]||1,t=(target-lens[j-1])/span;out.push({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t})}return out}
-function bbox(all){let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;all.flat().forEach(p=>{minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y)});return{minX,minY,w:Math.max(1,maxX-minX),h:Math.max(1,maxY-minY)}}function normalizeUser(ss){if(!ss.length)return[];let b=bbox(ss),scale=Math.min(89/b.w,89/b.h),ox=(109-b.w*scale)/2,oy=(109-b.h*scale)/2;return ss.map(s=>resample(s).map(p=>({x:(p.x-b.minX)*scale+ox,y:(p.y-b.minY)*scale+oy}))) }
-function meanDist(a,b,start=0,end=40){let sum=0,n=0;for(let k=start;k<Math.min(end,a.length,b.length);k++){sum+=Math.hypot(a[k].x-b[k].x,a[k].y-b[k].y);n++}return n?sum/n:99}function angle(a,b){return Math.atan2(b.y-a.y,b.x-a.x)}function adiff(a,b){let d=Math.abs(a-b)%(Math.PI*2);return d>Math.PI?Math.PI*2-d:d}
-function strokeMetrics(u,r){let whole=meanDist(u,r),tail=meanDist(u,r,32,40),endAngle=adiff(angle(u[34],u[39]),angle(r[34],r[39]));return{whole,tail,endAngle}}
-function glyphImageScore(ch){const S=64,t=document.createElement('canvas');t.width=t.height=S;let g=t.getContext('2d',{willReadFrequently:true});g.fillStyle='#fff';g.fillRect(0,0,S,S);g.drawImage(c,0,0,S,S);let user=g.getImageData(0,0,S,S).data,best=0;for(let font of ['"Yu Gothic",sans-serif','sans-serif','serif']){g.fillStyle='#fff';g.fillRect(0,0,S,S);g.fillStyle='#000';g.textAlign='center';g.textBaseline='middle';g.font=`700 52px ${font}`;g.fillText(ch,32,34);let ref=g.getImageData(0,0,S,S).data,inter=0,uni=0,ca=0,cb=0;for(let k=0;k<S*S;k++){let ui=255-(user[k*4]+user[k*4+1]+user[k*4+2])/3>55,ri=255-(ref[k*4]+ref[k*4+1]+ref[k*4+2])/3>55;if(ui||ri)uni++;if(ui&&ri)inter++;if(ui)ca++;if(ri)cb++}let iou=uni?inter/uni:0,dens=ca&&cb?Math.min(ca,cb)/Math.max(ca,cb):0;best=Math.max(best,iou*.72+dens*.28)}return best}
-async function judge(ch){let refs=await preload(ch),shape=glyphImageScore(ch);if(shape<.14)return{ok:false,shape,reason:'字全体の形がかなりちがいます'};if(!refs)return{ok:shape>=.18,shape,fallback:true};let diff=Math.abs(strokes.length-refs.length);if(diff>=2)return{ok:false,shape,reason:`画数がちがいます（書いたのは ${strokes.length}画、正しくは ${refs.length}画）`};let us=normalizeUser(strokes),bad=[];if(diff===0){for(let j=0;j<refs.length;j++){let m=strokeMetrics(us[j],refs[j]);if(m.whole>34||m.tail>38||m.endAngle>1.85)bad.push({n:j+1,...m})}}let severe=bad.length>=Math.max(3,Math.ceil(refs.length*.5));let ok=shape>=.18&&!severe;return{ok,shape,bad,count:diff===0,oneOff:diff===1}}
-document.getElementById('judge').onclick=async()=>{if(judged)return;if(strokes.length===0){res.textContent='× まだ かいていないよ';res.className='result ng';return}judged=true;res.textContent='はんてい中…';res.className='result loading';let ch=qs[i][1],r=await judge(ch);ans.textContent=ch;if(r.ok){res.textContent='○ せいかい！';res.className='result ok';score++;let html='<div class="good">✓ 字として正しく書けています</div>';if(r.oneOff)html+='<div class="warn">△ 画数は1画ちがうので、あとで書き順を確認してね</div>';else if(r.bad&&r.bad.length)html+='<div class="warn">△ とめ・はね・はらいは少し気になるけど、今回は正解</div>';checks.innerHTML=html}else{res.textContent='× ちがいます';res.className='result ng';let html=r.reason?`<div class="bad">✗ ${r.reason}</div>`:'';if(r.bad&&r.bad.length){for(const b of r.bad.slice(0,3))html+=`<div class="bad">✗ ${b.n}画目の形・終わり方を見直してね</div>`}checks.innerHTML=html||'<div class="bad">✗ もう一度たしかめてね</div>'}detail.textContent=`形の一致度：${Math.round((r.shape||0)*100)}%`};
-document.getElementById('next').onclick=()=>{i++;if(i>=qs.length){document.getElementById('quiz').style.display='none';let f=document.getElementById('finish');f.classList.add('show');document.getElementById('score').textContent=`${score}/10`;document.getElementById('msg').textContent=score===10?'ぜんもんせいかい！すごい！':score>=8?'とっても よくできました！':score>=5?'いいちょうし！もういちど やってみよう！':'れんしゅうすると もっと じょうずになるよ！'}else load()};
-</script></body></html>
+const qs=[...pool].sort(()=>Math.random()-.5).slice(0,10);
+let qi=0,score=0,judged=false,drawing=false,current=null,strokes=[];
+const c=document.getElementById('c'),x=c.getContext('2d');
+const q=document.getElementById('q'),n=document.getElementById('n'),res=document.getElementById('result'),ans=document.getElementById('ans'),detail=document.getElementById('detail'),checks=document.getElementById('checks');
+function guide(){x.fillStyle='#fff';x.fillRect(0,0,600,600);x.save();x.strokeStyle='#d1d5db';x.lineWidth=2;x.setLineDash([12,12]);x.beginPath();x.moveTo(300,0);x.lineTo(300,600);x.moveTo(0,300);x.lineTo(600,300);x.stroke();x.restore();}
+function drawStroke(stroke,color='#111',width=18,showNumber=null){if(!stroke||stroke.length<2)return;x.strokeStyle=color;x.lineCap='round';x.lineJoin='round';for(let i=1;i<stroke.length;i++){const a=stroke[i-1],b=stroke[i];const w=width*0.75+((b.pressure||0.5))*8;x.lineWidth=w;x.beginPath();x.moveTo(a.x,a.y);x.lineTo(b.x,b.y);x.stroke();}if(showNumber!=null){const p=stroke[0];x.fillStyle=color;x.beginPath();x.arc(p.x,p.y,12,0,Math.PI*2);x.fill();x.fillStyle='#fff';x.font='bold 14px sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText(String(showNumber),p.x,p.y+1);}}
+function redraw(highlights={bad:new Set(),warn:new Set()}){guide();strokes.forEach((s,idx)=>{let color='#111';if(highlights.bad&&highlights.bad.has(idx))color='#e63946';else if(highlights.warn&&highlights.warn.has(idx))color='#f4a261';drawStroke(s,color,18,(highlights.bad&&highlights.bad.has(idx))||(highlights.warn&&highlights.warn.has(idx))?idx+1:null);});}
+function p(e){const r=c.getBoundingClientRect();return{x:(e.clientX-r.left)*600/r.width,y:(e.clientY-r.top)*600/r.height,t:performance.now(),pressure:e.pressure||.5}}
+c.onpointerdown=e=>{if(judged)return;drawing=true;c.setPointerCapture(e.pointerId);current=[p(e)]};
+c.onpointermove=e=>{if(!drawing||judged)return;const a=p(e),last=current[current.length-1];drawStroke([last,a],'#111',18);current.push(a)};
+function endStroke(e){if(!drawing)return;drawing=false;if(current&&current.length>1){if(e&&e.clientX!=null)current.push(p(e));strokes.push(current)}current=null}
+c.onpointerup=endStroke;c.onpointercancel=endStroke;
+function clearAll(){guide();judged=false;strokes=[];current=null;res.textContent='';res.className='result';ans.textContent='';detail.textContent='';checks.innerHTML=''}
+document.getElementById('clear').onclick=clearAll;
+function load(){clearAll();n.textContent=qi+1;q.textContent=`『${qs[qi][0]}』を かんじで かきましょう。`;preload(qs[qi][1])}
+load();
+const refCache=new Map();
+function hex5(ch){return ch.codePointAt(0).toString(16).padStart(5,'0')}
+async function preload(ch){if(refCache.has(ch))return refCache.get(ch);try{const r=await fetch(`https://raw.githubusercontent.com/KanjiVG/kanjivg/master/kanji/${hex5(ch)}.svg`,{cache:'force-cache'});if(!r.ok)throw new Error('fetch');const txt=await r.text();const doc=new DOMParser().parseFromString(txt,'image/svg+xml');const paths=[...doc.querySelectorAll('path[id*="-s"]')];const refs=paths.map(el=>sampleSvgPath(el.getAttribute('d')));refCache.set(ch,refs);return refs;}catch(e){refCache.set(ch,null);return null}}
+function sampleSvgPath(d){const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg'),path=document.createElementNS(ns,'path');path.setAttribute('d',d);svg.appendChild(path);svg.style.position='absolute';svg.style.left='-9999px';document.body.appendChild(svg);const L=path.getTotalLength(),pts=[];for(let k=0;k<36;k++){const a=path.getPointAtLength(L*k/35);pts.push({x:a.x,y:a.y});}svg.remove();return pts;}
+function bbox(all){let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;all.flat().forEach(p=>{minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y)});return{minX,minY,maxX,maxY,w:Math.max(1,maxX-minX),h:Math.max(1,maxY-minY)}}
+function resample(poly,N=36){if(poly.length<2)return poly;const lens=[0];for(let i=1;i<poly.length;i++)lens.push(lens[i-1]+Math.hypot(poly[i].x-poly[i-1].x,poly[i].y-poly[i-1].y));const total=lens[lens.length-1];if(total<1)return poly;const out=[];for(let k=0;k<N;k++){const target=total*k/(N-1);let j=1;while(j<lens.length&&lens[j]<target)j++;if(j>=lens.length){out.push({...poly[poly.length-1]});continue;}const a=poly[j-1],b=poly[j],span=lens[j]-lens[j-1]||1,t=(target-lens[j-1])/span;out.push({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});}return out;}
+function normalizeSet(ss){if(!ss.length)return[];const b=bbox(ss),scale=Math.min(88/b.w,88/b.h),ox=(108-b.w*scale)/2,oy=(108-b.h*scale)/2;return ss.map(s=>resample(s).map(p=>({x:(p.x-b.minX)*scale+ox,y:(p.y-b.minY)*scale+oy})));}
+function meanDist(a,b,start=0,end=36){let sum=0,n=0;for(let k=start;k<Math.min(end,a.length,b.length);k++){sum+=Math.hypot(a[k].x-b[k].x,a[k].y-b[k].y);n++;}return n?sum/n:99}
+function angle(a,b){return Math.atan2(b.y-a.y,b.x-a.x)}
+function adiff(a,b){let d=Math.abs(a-b)%(Math.PI*2);return d>Math.PI?Math.PI*2-d:d}
+function strokeFeatures(s){const r=resample(s,36);return{pts:r,start:r[0],end:r[r.length-1],tailAngle:angle(r[30],r[35]),overallAngle:angle(r[0],r[35]),length:r.slice(1).reduce((acc,p,idx)=>acc+Math.hypot(p.x-r[idx].x,p.y-r[idx].y),0)};}
+function costForMatch(uRef,rRef,ui,ri){const whole=meanDist(uRef.pts,rRef.pts,0,36);const tail=meanDist(uRef.pts,rRef.pts,26,36);const startDist=Math.hypot(uRef.start.x-rRef.start.x,uRef.start.y-rRef.start.y);const endDist=Math.hypot(uRef.end.x-rRef.end.x,uRef.end.y-rRef.end.y);const endAngle=adiff(uRef.tailAngle,rRef.tailAngle);const orderPenalty=Math.min(Math.abs(ui-ri)*1.6,6.5);const cost=whole*0.45+tail*0.15+startDist*0.15+endDist*0.12+endAngle*7+orderPenalty;return{cost,whole,tail,startDist,endDist,endAngle};}
+function glyphImageScore(ch){const S=64,t=document.createElement('canvas');t.width=t.height=S;const g=t.getContext('2d',{willReadFrequently:true});g.fillStyle='#fff';g.fillRect(0,0,S,S);g.drawImage(c,0,0,S,S);const user=g.getImageData(0,0,S,S).data;let best=0;for(const font of ['"Yu Gothic",sans-serif','sans-serif','serif']){g.fillStyle='#fff';g.fillRect(0,0,S,S);g.fillStyle='#000';g.textAlign='center';g.textBaseline='middle';g.font=`700 52px ${font}`;g.fillText(ch,32,34);const ref=g.getImageData(0,0,S,S).data;let inter=0,uni=0,ca=0,cb=0;for(let k=0;k<S*S;k++){const ui=255-(user[k*4]+user[k*4+1]+user[k*4+2])/3>55;const ri=255-(ref[k*4]+ref[k*4+1]+ref[k*4+2])/3>55;if(ui||ri)uni++;if(ui&&ri)inter++;if(ui)ca++;if(ri)cb++;}const iou=uni?inter/uni:0,dens=(ca&&cb)?Math.min(ca,cb)/Math.max(ca,cb):0;best=Math.max(best,iou*0.8+dens*0.2);}return best;}
+function bestAssignment(userNorm,refNorm){const U=userNorm.length,R=refNorm.length;const uFeat=userNorm.map(strokeFeatures),rFeat=refNorm.map(strokeFeatures);const costData=Array.from({length:R},()=>Array(U).fill(null));for(let ri=0;ri<R;ri++)for(let ui=0;ui<U;ui++)costData[ri][ui]=costForMatch(uFeat[ui],rFeat[ri],ui,ri);const memo=new Map();const missingPenalty=24,extraPenalty=18;function solve(ri,mask){const key=ri+'|'+mask;if(memo.has(key))return memo.get(key);let out;if(ri===R){const used=bitCount(mask),extra=U-used;out={score:extra*extraPenalty,pairs:[],missing:[]};}else{const withSkip=solve(ri+1,mask);let best={score:withSkip.score+missingPenalty,pairs:withSkip.pairs.slice(),missing:[ri,...withSkip.missing]};for(let ui=0;ui<U;ui++){if(mask&(1<<ui))continue;const next=solve(ri+1,mask|(1<<ui));const score=next.score+costData[ri][ui].cost;if(score<best.score)best={score,pairs:[{ref:ri,user:ui,metrics:costData[ri][ui]},...next.pairs],missing:next.missing.slice()};}out=best;}memo.set(key,out);return out;}const result=solve(0,0);const matchedUsers=new Set(result.pairs.map(p=>p.user));const extraUsers=[];for(let ui=0;ui<U;ui++)if(!matchedUsers.has(ui))extraUsers.push(ui);result.extraUsers=extraUsers;return result;}
+function bitCount(n){let c=0;while(n){n&=(n-1);c++;}return c;}
+async function judge(ch){const shape=glyphImageScore(ch);const refs=await preload(ch);if(shape<0.17)return{ok:false,shape,reason:'字全体の形がちがいます',badUsers:new Set(),warnUsers:new Set()};if(!refs)return{ok:shape>=0.25,shape,badUsers:new Set(),warnUsers:new Set(),fallback:true};const userNorm=normalizeSet(strokes),refNorm=normalizeSet(refs);const assignment=bestAssignment(userNorm,refNorm);const diff=Math.abs(strokes.length-refs.length);const badUsers=new Set(),warnUsers=new Set();let severe=0,mild=0;for(const pair of assignment.pairs){const m=pair.metrics;const isSevere=m.cost>29||m.whole>22||(m.tail>18&&m.endAngle>1.45)||m.startDist>30;const isMild=!isSevere&&(m.cost>23||m.whole>17||m.tail>15||m.endAngle>1.1);if(isSevere){badUsers.add(pair.user);severe++;}else if(isMild){warnUsers.add(pair.user);mild++;}}assignment.extraUsers.forEach(ui=>badUsers.add(ui));if(assignment.missing.length>=2)severe+=assignment.missing.length;else if(assignment.missing.length===1)mild+=1;let ok=false;if(shape>=0.30&&severe===0&&diff<=1)ok=true;else if(shape>=0.25&&severe===0&&mild<=2&&diff<=1)ok=true;else if(shape>=0.21&&severe===0&&mild<=1&&diff===0)ok=true;else if(shape>=0.19&&severe===0&&mild===0&&diff===0)ok=true;if(shape<0.24&&badUsers.size>0)ok=false;if(diff>=2)ok=false;let reason='';if(!ok){if(shape<0.17)reason='字全体の形がちがいます';else if(diff>=2)reason=`画数がちがいます（書いたのは ${strokes.length}画、正しくは ${refs.length}画）`;else if(badUsers.size)reason='まちがっている画があります';else reason='もう一度たしかめてね';}return{ok,shape,assignment,diff,badUsers,warnUsers,reason};}
+document.getElementById('judge').onclick=async()=>{if(judged)return;if(strokes.length===0){res.textContent='× まだ かいていないよ';res.className='result ng';return;}judged=true;res.textContent='はんてい中…';res.className='result loading';const ch=qs[qi][1],r=await judge(ch);ans.textContent=ch;if(r.ok){res.textContent='○ せいかい！';res.className='result ok';score++;redraw({bad:r.badUsers,warn:r.warnUsers});let html='<div class="good">✓ 字として正しく書けています</div>';if(r.warnUsers.size){const arr=[...r.warnUsers].sort((a,b)=>a-b).map(v=>`${v+1}画目`).join('、');html+=`<div class="warn">△ ${arr} は少し気になるけど、今回は正解</div>`;}if(r.diff===1)html+='<div class="warn">△ 画数が1画ちがう可能性があります。あとで見直してみよう</div>';checks.innerHTML=html;}else{res.textContent='× ちがいます';res.className='result ng';redraw({bad:r.badUsers,warn:new Set()});const badList=[...r.badUsers].sort((a,b)=>a-b);let html=r.reason?`<div class="bad">✗ ${r.reason}</div>`:'';if(badList.length){html+=badList.slice(0,4).map(idx=>`<div class="bad">✗ ${idx+1}画目を赤で表示したよ。ここを見直してね</div>`).join('');}checks.innerHTML=html||'<div class="bad">✗ もう一度たしかめてね</div>';}detail.textContent=r.fallback?'通信できなかったため、簡易判定を使いました':`形の一致度：${Math.round((r.shape||0)*100)}%`;};
+document.getElementById('next').onclick=()=>{qi++;if(qi>=qs.length){document.getElementById('quiz').style.display='none';const f=document.getElementById('finish');f.classList.add('show');document.getElementById('score').textContent=`${score}/10`;document.getElementById('msg').textContent=score===10?'ぜんもんせいかい！すごい！':score>=8?'とっても よくできました！':score>=5?'いいちょうし！もういちど やってみよう！':'れんしゅうすると もっと じょうずになるよ！';}else load();};
+</script>
+</body>
+</html>
