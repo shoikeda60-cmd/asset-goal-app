@@ -1,4 +1,4 @@
-name: FX 3pip Calibrated Live Probability Bridge
+name: FX 3pip Same-47-Feature Reach Model
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  build-3pip-bridge:
+  build-3pip-same47:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,10 +28,10 @@ jobs:
           curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2&cosd=2026-01-01&coed=2026-08-15' -o DGS2.csv
       - name: Install dependencies
         run: python3 -m pip install --quiet numpy scikit-learn
-      - name: Train and calibrate 3pip bridge
+      - name: Train 3pip reach using exact production 47-feature inputs
         run: |
           python3 - <<'PY'
-          import json, math, sys
+          import json, sys
           from bisect import bisect_right
           from datetime import timedelta
           import numpy as np
@@ -43,78 +43,88 @@ jobs:
           import backtest_fx_ml as bt
           import backtest_fx_precision as px
 
-          with open('fx-model.json',encoding='utf-8') as f: model=json.load(f)
-          m1,rows=bt.build(); d2=px.load_yield('DGS2.csv'); d10=px.load_yield('DGS10.csv')
-          for r in rows:r['xp']=r['x']+px.macro_extra(r['t'],d2,d10)
-          times=[b['t'] for b in m1]
+          # IMPORTANT: do NOT change bt.TARGET. bt.build() therefore creates the
+          # exact same 42 base features as production (5.1911590909pip scaling).
+          # We only replace the reach LABEL with a 3.0pip/30-minute label.
+          m1, rows = bt.build()
+          d2 = px.load_yield('DGS2.csv')
+          d10 = px.load_yield('DGS10.csv')
+          for r in rows:
+              r['xp'] = r['x'] + px.macro_extra(r['t'], d2, d10)
 
-          def logit_model(m,x):
-              z=m['intercept']
-              for i,v in enumerate(x):z+=((v-m['mean'][i])/(m['scale'][i] or 1.0))*m['coef'][i]
-              z=max(-40,min(40,z));return 1/(1+math.exp(-z))
-          def hgb(m,x):
-              raw=m['baseline']
-              for nodes in m['trees']:
-                  i=0
-                  while not nodes[i]['leaf']:
-                      n=nodes[i];v=x[n['f']]
-                      i=(n['l'] if n['ml'] else n['r']) if not math.isfinite(v) else (n['l'] if v<=n['t'] else n['r'])
-                  raw+=nodes[i]['v']
-              raw=max(-40,min(40,raw));return 1/(1+math.exp(-raw))
-          def make_row(r):
-              rp=logit_model(model['reach'],r['xp']);dp=hgb(model['direction'],r['xp']);dc=max(dp,1-dp)
-              j=bisect_right(times,r['t']);e=bisect_right(times,r['t']+timedelta(minutes=30));f=m1[j:e]
-              if not f or j==0:return None
-              base=m1[j-1]['c'];d=.03
-              y=int(any(x['h']>=base+d or x['l']<=base-d for x in f))
-              return r['t'],[rp,dc,rp*dc],y
+          times = [b['t'] for b in m1]
+          def label3(r):
+              j = bisect_right(times, r['t'])
+              e = bisect_right(times, r['t'] + timedelta(minutes=30))
+              fut = m1[j:e]
+              if not fut or j == 0:
+                  return None
+              base = m1[j-1]['c']
+              d = 0.03
+              return int(any(x['h'] >= base+d or x['l'] <= base-d for x in fut))
 
-          z=[make_row(r) for r in rows];z=[x for x in z if x]
-          tr=[x for x in z if x[0]<bt.TUNE];tu=[x for x in z if bt.TUNE<=x[0]<bt.HOLD];ho=[x for x in z if x[0]>=bt.HOLD]
-          def xy(a):return np.array([x[1] for x in a]),np.array([x[2] for x in a])
-          Xtr,ytr=xy(tr);Xtu,ytu=xy(tu);Xho,yho=xy(ho)
+          data=[]
+          for r in rows:
+              y=label3(r)
+              if y is not None:
+                  data.append((r['t'], r['xp'], y))
 
-          best=None
-          for C in (.05,.1,.2,.35,.5,1,2):
-              p=make_pipeline(StandardScaler(),LogisticRegression(C=C,max_iter=2000)).fit(Xtr,ytr)
-              q=p.predict_proba(Xtu)[:,1];b=brier_score_loss(ytu,q)
-              if best is None or b<best[0]:best=(b,C,p)
-          _,C,p=best
-          qtu=p.predict_proba(Xtu)[:,1]
-          eps=1e-6
-          ltu=np.log(np.clip(qtu,eps,1-eps)/(1-np.clip(qtu,eps,1-eps))).reshape(-1,1)
-          cal=LogisticRegression(C=1000,max_iter=2000).fit(ltu,ytu)
+          tr=[x for x in data if x[0] < bt.TUNE]
+          tu=[x for x in data if bt.TUNE <= x[0] < bt.HOLD]
+          ho=[x for x in data if x[0] >= bt.HOLD]
+          def xy(a):
+              return np.array([x[1] for x in a]), np.array([x[2] for x in a])
+          Xtr,ytr=xy(tr); Xtu,ytu=xy(tu); Xho,yho=xy(ho)
 
-          def calibrated(probs):
-              lp=np.log(np.clip(probs,eps,1-eps)/(1-np.clip(probs,eps,1-eps))).reshape(-1,1)
-              return cal.predict_proba(lp)[:,1]
-          ph0=p.predict_proba(Xho)[:,1];ph=calibrated(ph0)
-          sc=p.named_steps['standardscaler'];lr=p.named_steps['logisticregression']
+          # Same reach-model family and hyperparameters as the promoted 5.19pip model.
+          pipe=make_pipeline(
+              StandardScaler(),
+              LogisticRegression(C=.35,max_iter=2500,class_weight='balanced')
+          ).fit(Xtr,ytr)
+
+          ptu=pipe.predict_proba(Xtu)[:,1]
+          pho=pipe.predict_proba(Xho)[:,1]
+          sc=pipe.named_steps['standardscaler']
+          lr=pipe.named_steps['logisticregression']
+
           out={
-            'target_pips':3.0,'horizon_minutes':30,
-            'inputs':['reach_5_19_probability','direction_confidence','interaction'],
-            'mean':[float(v) for v in sc.mean_],'scale':[float(v) for v in sc.scale_],
-            'coef':[float(v) for v in lr.coef_[0]],'intercept':float(lr.intercept_[0]),'C':C,
-            'calibration':{'coef':float(cal.coef_[0][0]),'intercept':float(cal.intercept_[0])},
-            'validation':{
-              'period':'2026-07-01..2026-08-14','samples':int(len(yho)),
-              'observed_3pip_reach_either_direction_pct':float(100*yho.mean()),
-              'avg_predicted_probability_pct':float(100*ph.mean()),
-              'brier_score':float(brier_score_loss(yho,ph)),
-              'roc_auc':float(roc_auc_score(yho,ph))
-            },
-            'note':'Calibrated live 3pip reach probability derived from the promoted 5.19pip reach probability and direction confidence. Reach means either direction within 30 minutes.'
+              'target_pips':3.0,
+              'horizon_minutes':30,
+              'feature_count':int(Xtr.shape[1]),
+              'feature_basis_target_pips':bt.TARGET,
+              'reach':{
+                  'mean':[float(v) for v in sc.mean_],
+                  'scale':[float(v) for v in sc.scale_],
+                  'coef':[float(v) for v in lr.coef_[0]],
+                  'intercept':float(lr.intercept_[0])
+              },
+              'validation':{
+                  'tune_period':'2026-06-01..2026-06-30',
+                  'tune_samples':int(len(ytu)),
+                  'tune_observed_reach_pct':float(100*ytu.mean()),
+                  'tune_avg_probability_pct':float(100*ptu.mean()),
+                  'tune_brier':float(brier_score_loss(ytu,ptu)),
+                  'tune_auc':float(roc_auc_score(ytu,ptu)),
+                  'holdout_period':'2026-07-01..2026-08-14',
+                  'holdout_samples':int(len(yho)),
+                  'holdout_observed_reach_pct':float(100*yho.mean()),
+                  'holdout_avg_probability_pct':float(100*pho.mean()),
+                  'holdout_brier':float(brier_score_loss(yho,pho)),
+                  'holdout_auc':float(roc_auc_score(yho,pho))
+              },
+              'note':'3pip reach model trained on the exact same 47-feature vector and same LogisticRegression settings as the production 5.19pip reach model. Only the reach label is changed to ±3pip within 30 minutes. The production direction model is unchanged.'
           }
-          with open('fx-model-3pip-bridge.json','w',encoding='utf-8') as f:json.dump(out,f,ensure_ascii=False,separators=(',',':'))
+          with open('fx-model-3pip-same47.json','w',encoding='utf-8') as f:
+              json.dump(out,f,ensure_ascii=False,separators=(',',':'))
           print(json.dumps(out['validation'],indent=2))
           PY
-      - name: Save bridge model to branch
+      - name: Save model to experiment branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add fx-model-3pip-bridge.json
+          git add fx-model-3pip-same47.json
           if ! git diff --cached --quiet; then
-            git commit -m "Calibrate 3pip live probability bridge"
+            git commit -m "Build 3pip reach model on production 47 features"
             git pull --rebase origin experiment/target-pips-3-4-519
             git push origin HEAD:experiment/target-pips-3-4-519
           fi
