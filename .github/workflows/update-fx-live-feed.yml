@@ -1,0 +1,85 @@
+name: Update FX Live Feed
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/update-fx-live-feed.yml'
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fx-live-feed
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch USDJPY OHLC from Yahoo Finance
+        run: |
+          python3 - <<'PY'
+          import json, urllib.parse, urllib.request
+          from datetime import datetime, timezone
+
+          specs = {
+              '1m': '1d',
+              '5m': '5d',
+              '15m': '1mo',
+              '60m': '3mo',
+              '1d': '1y',
+          }
+
+          def fetch(interval, rng):
+              params = urllib.parse.urlencode({
+                  'interval': interval,
+                  'range': rng,
+                  'includePrePost': 'true',
+                  'events': 'div,splits',
+              })
+              last = None
+              for host in ('query1.finance.yahoo.com', 'query2.finance.yahoo.com'):
+                  url = f'https://{host}/v8/finance/chart/JPY=X?{params}'
+                  req = urllib.request.Request(url, headers={'User-Agent':'Mozilla/5.0'})
+                  try:
+                      with urllib.request.urlopen(req, timeout=30) as r:
+                          j = json.load(r)
+                      z = j['chart']['result'][0]
+                      q = z['indicators']['quote'][0]
+                      ts = z.get('timestamp') or []
+                      bars = []
+                      for i,t in enumerate(ts):
+                          vals = [q.get(k,[None]*len(ts))[i] for k in ('open','high','low','close')]
+                          if all(isinstance(v,(int,float)) for v in vals):
+                              bars.append([int(t)*1000, float(vals[0]), float(vals[1]), float(vals[2]), float(vals[3])])
+                      if len(bars) < 20:
+                          raise RuntimeError(f'few bars {interval}: {len(bars)}')
+                      return bars
+                  except Exception as e:
+                      last = e
+              raise last or RuntimeError('fetch failed')
+
+          out = {'generated_at': datetime.now(timezone.utc).isoformat(), 'symbol':'JPY=X', 'series':{}}
+          for interval, rng in specs.items():
+              out['series'][interval] = fetch(interval, rng)
+          with open('fx-live-series.json','w',encoding='utf-8') as f:
+              json.dump(out,f,ensure_ascii=False,separators=(',',':'))
+          print(out['generated_at'], {k:len(v) for k,v in out['series'].items()})
+          PY
+      - name: Publish live feed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add fx-live-series.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update USDJPY live feed [skip ci]"
+            git pull --rebase origin main
+            git push
+          fi
