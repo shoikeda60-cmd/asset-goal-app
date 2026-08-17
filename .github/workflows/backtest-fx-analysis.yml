@@ -1,4 +1,4 @@
-name: FX 3pip Live Reach Model Experiment
+name: FX 3pip Live Probability Bridge
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  build-3pip-reach:
+  build-3pip-bridge:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,10 +28,12 @@ jobs:
           curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2&cosd=2026-01-01&coed=2026-08-15' -o DGS2.csv
       - name: Install dependencies
         run: python3 -m pip install --quiet numpy scikit-learn
-      - name: Train and export 3pip reach model
+      - name: Train bridge from live 5pip outputs to 3pip probability
         run: |
           python3 - <<'PY'
-          import json, sys
+          import json, math, sys
+          from bisect import bisect_right
+          from datetime import timedelta
           import numpy as np
           from sklearn.pipeline import make_pipeline
           from sklearn.preprocessing import StandardScaler
@@ -41,56 +43,75 @@ jobs:
           import backtest_fx_ml as bt
           import backtest_fx_precision as px
 
-          bt.TARGET = 3.0
-          _, rows = bt.build()
-          d2 = px.load_yield('DGS2.csv')
-          d10 = px.load_yield('DGS10.csv')
-          for r in rows:
-              r['xp'] = r['x'] + px.macro_extra(r['t'], d2, d10)
+          with open('fx-model.json',encoding='utf-8') as f: model=json.load(f)
+          m1, rows = bt.build()
+          d2=px.load_yield('DGS2.csv'); d10=px.load_yield('DGS10.csv')
+          for r in rows: r['xp']=r['x']+px.macro_extra(r['t'],d2,d10)
 
-          tr = [r for r in rows if r['t'] < bt.TUNE]
-          ho = [r for r in rows if r['t'] >= bt.HOLD]
-          X = np.array([r['xp'] for r in tr])
-          y = np.array([1 if r['reach'] else 0 for r in tr])
-          pipe = make_pipeline(StandardScaler(), LogisticRegression(C=.35, max_iter=2500, class_weight='balanced')).fit(X, y)
+          def logistic(m,x):
+              z=m['intercept']
+              for i,v in enumerate(x): z += ((v-m['mean'][i])/(m['scale'][i] or 1.0))*m['coef'][i]
+              z=max(-40,min(40,z)); return 1/(1+math.exp(-z))
+          def hgb(m,x):
+              raw=m['baseline']
+              for nodes in m['trees']:
+                  i=0
+                  while not nodes[i]['leaf']:
+                      n=nodes[i]; v=x[n['f']]
+                      i=(n['l'] if n['ml'] else n['r']) if not math.isfinite(v) else (n['l'] if v<=n['t'] else n['r'])
+                  raw += nodes[i]['v']
+              raw=max(-40,min(40,raw)); return 1/(1+math.exp(-raw))
 
-          sc = pipe.named_steps['standardscaler']
-          lr = pipe.named_steps['logisticregression']
-          Xh = np.array([r['xp'] for r in ho])
-          yh = np.array([1 if r['reach'] else 0 for r in ho])
-          ph = pipe.predict_proba(Xh)[:,1]
+          times=[b['t'] for b in m1]
+          def bridge_row(r):
+              rp=logistic(model['reach'],r['xp']); dp=hgb(model['direction'],r['xp']); dc=max(dp,1-dp)
+              j=bisect_right(times,r['t']); e=bisect_right(times,r['t']+timedelta(minutes=30)); fut=m1[j:e]
+              if not fut or j==0:return None
+              base=m1[j-1]['c']; d=.03
+              y=int(any(x['h']>=base+d or x['l']<=base-d for x in fut))
+              return [rp,dc,rp*dc],y
 
-          out = {
-              'target_pips': 3.0,
-              'horizon_minutes': 30,
-              'feature_count': int(X.shape[1]),
-              'reach': {
-                  'mean': [float(v) for v in sc.mean_],
-                  'scale': [float(v) for v in sc.scale_],
-                  'coef': [float(v) for v in lr.coef_[0]],
-                  'intercept': float(lr.intercept_[0])
-              },
-              'validation': {
-                  'period': '2026-07-01..2026-08-14',
-                  'samples': int(len(ho)),
-                  'observed_reach_either_direction_pct': float(100*yh.mean()),
-                  'avg_predicted_probability_pct': float(100*ph.mean()),
-                  'brier_score': float(brier_score_loss(yh, ph)),
-                  'roc_auc': float(roc_auc_score(yh, ph))
-              },
-              'note': 'Dedicated live 3pip reach model. Reach means either +3pip or -3pip within 30 minutes; direction is handled separately by the promoted direction model.'
+          z=[bridge_row(r) for r in rows]; z=[x for x in z if x is not None]
+          # rows are still in time order and correspond to Apr-Aug.
+          zz=[]
+          for r,b in zip(rows,[bridge_row(r) for r in rows]):
+              if b is not None: zz.append((r['t'],b[0],b[1]))
+          tr=[x for x in zz if x[0]<bt.TUNE]; tu=[x for x in zz if bt.TUNE<=x[0]<bt.HOLD]; ho=[x for x in zz if x[0]>=bt.HOLD]
+          def xy(a):return np.array([x[1] for x in a]),np.array([x[2] for x in a])
+          Xtr,ytr=xy(tr); Xtu,ytu=xy(tu); Xho,yho=xy(ho)
+
+          best=None
+          for C in (.05,.1,.2,.35,.5,1.0,2.0):
+              p=make_pipeline(StandardScaler(),LogisticRegression(C=C,max_iter=2000)).fit(Xtr,ytr)
+              q=p.predict_proba(Xtu)[:,1]; b=brier_score_loss(ytu,q)
+              if best is None or b<best[0]: best=(b,C,p)
+          _,C,p=best
+          ph=p.predict_proba(Xho)[:,1]
+          sc=p.named_steps['standardscaler']; lr=p.named_steps['logisticregression']
+          out={
+            'target_pips':3.0,'horizon_minutes':30,
+            'inputs':['reach_5_19_probability','direction_confidence','interaction'],
+            'mean':[float(v) for v in sc.mean_],'scale':[float(v) for v in sc.scale_],
+            'coef':[float(v) for v in lr.coef_[0]],'intercept':float(lr.intercept_[0]),'C':C,
+            'validation':{
+              'period':'2026-07-01..2026-08-14','samples':int(len(yho)),
+              'observed_3pip_reach_either_direction_pct':float(100*yho.mean()),
+              'avg_predicted_probability_pct':float(100*ph.mean()),
+              'brier_score':float(brier_score_loss(yho,ph)),
+              'roc_auc':float(roc_auc_score(yho,ph))
+            },
+            'note':'Live 3pip reach probability bridge calibrated from the promoted 5.19pip reach probability and direction confidence. Reach means either direction within 30 minutes.'
           }
-          with open('fx-model-3pip.json','w',encoding='utf-8') as f:
-              json.dump(out,f,ensure_ascii=False,separators=(',',':'))
+          with open('fx-model-3pip-bridge.json','w',encoding='utf-8') as f: json.dump(out,f,ensure_ascii=False,separators=(',',':'))
           print(json.dumps(out['validation'],indent=2))
           PY
-      - name: Save experiment model to branch
+      - name: Save bridge model to branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add fx-model-3pip.json
+          git add fx-model-3pip-bridge.json
           if ! git diff --cached --quiet; then
-            git commit -m "Build dedicated 3pip live reach model"
+            git commit -m "Build 3pip live probability bridge"
             git pull --rebase origin experiment/target-pips-3-4-519
             git push origin HEAD:experiment/target-pips-3-4-519
           fi
