@@ -21,44 +21,32 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           p=Path('fx-analysis.js')
           s=p.read_text(encoding='utf-8')
 
-          old="const decisionCutoff=m1=>(m1.filter(b=>Math.floor(b.t/60000)%15===0).at(-1)||m1.at(-1)).t;"
-          new="const decisionCutoff=m1=>{const last=m1.at(-1);if(!last)return 0;return Math.floor(last.t/(15*60*1000))*(15*60*1000);};"
-          if old not in s:
-              raise SystemExit('decisionCutoff pattern not found')
-          s=s.replace(old,new,1)
+          s,n=re.subn(
+              r"const decisionCutoff=m1=>[^\n]+;",
+              "const decisionCutoff=m1=>{const last=m1.at(-1);if(!last)return 0;return Math.floor(last.t/(15*60*1000))*(15*60*1000);};",
+              s,count=1
+          )
+          if n!=1:
+              raise SystemExit(f'decisionCutoff replacements={n}')
 
-          old="return{pips:Math.max(.1,targetPips()),reach,pLong,pShort:1-pLong,dirConf,signal,reasons,scores:f.scores,labels,price:f.price,cutoff};}"
-          new="return{pips:Math.max(.1,targetPips()),reach,pLong,pShort:1-pLong,dirConf,signal,reasons,scores:f.scores,labels,price:f.price,cutoff,dataAt:series.m1.at(-1)?.t||cutoff};}"
-          if old not in s:
-              raise SystemExit('analyze return pattern not found')
-          s=s.replace(old,new,1)
-
-          old="$('fxaStatus').textContent='判定 '+new Date(a.cutoff).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})+' / 15分更新';}"
-          new="$('fxaStatus').textContent='AI判定 '+new Date(a.cutoff).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'})+' / 価格 '+new Date(a.dataAt||a.cutoff).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'}); }"
-          if old not in s:
-              raise SystemExit('render status pattern not found')
-          s=s.replace(old,new,1)
-
-          old="if(e)e.textContent='判定 '+new Date(cutoff).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})+' / 次回15分更新';"
-          new="if(e){const dataAt=series.m1.at(-1)?.t||cutoff;e.textContent='AI判定 '+new Date(cutoff).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'})+' / 価格 '+new Date(dataAt).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});}"
-          if old not in s:
-              raise SystemExit('tick status pattern not found')
-          s=s.replace(old,new,1)
+          new_tick="""async function tick(){if(busy)return;busy=true;try{if(!browserModel||!macroContext)await loadInputs();const series=await fetchSeries(),dataAt=series.m1.at(-1)?.t||0,cutoff=decisionCutoff(series.m1),key=String(cutoff);if(!cutoff)throw new Error('no decision cutoff');if(key!==lastDecisionKey){render(analyze(series,browserModel,macroContext,cutoff));lastDecisionKey=key;}const e=document.getElementById('fxaStatus');if(e){const fmt=t=>new Date(t).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});e.textContent='AI判定 '+fmt(cutoff)+' / 価格 '+fmt(dataAt);}}catch(e){console.warn('fx analysis',e);error('分析データ取得待ち');}finally{busy=false;}}"""
+          s,n=re.subn(r"async function tick\(\)\{.*?\}\n  function start\(\)\{[^\n]+\}",new_tick+"\n  function start(){tick();setInterval(tick,5000);}",s,count=1,flags=re.S)
+          if n!=1:
+              raise SystemExit(f'tick/start replacements={n}')
 
           p.write_text(s,encoding='utf-8')
 
           sw=Path('sw.js')
           w=sw.read_text(encoding='utf-8')
-          w=w.replace("const CACHE='asset-goal-v29-realtime-primary';","const CACHE='asset-goal-v30-decision-time-fix';")
-          w=w.replace('?v=29','?v=30')
-          # Be tolerant if the exact v29 cache label differs, but always bump any current v29 label.
-          if "asset-goal-v29" in w:
-              import re
-              w=re.sub(r"const CACHE='asset-goal-v29[^']*';","const CACHE='asset-goal-v30-decision-time-fix';",w,count=1)
+          w,ncache=re.subn(r"const CACHE='asset-goal-v\d+[^']*';","const CACHE='asset-goal-v30-decision-time-fix';",w,count=1)
+          if ncache!=1:
+              raise SystemExit('cache label not found')
+          w=re.sub(r'\?v=\d+', '?v=30', w)
           sw.write_text(w,encoding='utf-8')
           PY
       - name: Commit fix
