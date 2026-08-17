@@ -1,4 +1,4 @@
-const CACHE='asset-goal-v29-realtime-fx-first';
+const CACHE='asset-goal-v30-decision-time-fix';
 const ASSETS=['./','./index.html','./manifest.webmanifest','./cashflow.js','./delete-sync.js','./chart-axis.js','./rate-tab.js','./rate-sbi.js','./fx-live-feed.js','./fx-analysis.js','./fx-3pip.js','./fx-model.json','./fx-model-3pip-same47.json','./macro-context.json'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)))});
 self.addEventListener('activate',e=>e.waitUntil(Promise.all([
@@ -7,14 +7,14 @@ self.addEventListener('activate',e=>e.waitUntil(Promise.all([
 ])));
 function enhanceHtml(html){
   const scripts=[];
-  if(!html.includes('cashflow.js')) scripts.push('<script src="./cashflow.js?v=29"></script>');
-  if(!html.includes('delete-sync.js')) scripts.push('<script src="./delete-sync.js?v=29"></script>');
-  if(!html.includes('chart-axis.js')) scripts.push('<script src="./chart-axis.js?v=29"></script>');
-  if(!html.includes('rate-tab.js')) scripts.push('<script src="./rate-tab.js?v=29"></script>');
-  if(!html.includes('rate-sbi.js')) scripts.push('<script src="./rate-sbi.js?v=29"></script>');
-  if(!html.includes('fx-live-feed.js')) scripts.push('<script src="./fx-live-feed.js?v=29"></script>');
-  if(!html.includes('fx-analysis.js')) scripts.push('<script src="./fx-analysis.js?v=29"></script>');
-  if(!html.includes('fx-3pip.js')) scripts.push('<script src="./fx-3pip.js?v=29"></script>');
+  if(!html.includes('cashflow.js')) scripts.push('<script src="./cashflow.js?v=30"></script>');
+  if(!html.includes('delete-sync.js')) scripts.push('<script src="./delete-sync.js?v=30"></script>');
+  if(!html.includes('chart-axis.js')) scripts.push('<script src="./chart-axis.js?v=30"></script>');
+  if(!html.includes('rate-tab.js')) scripts.push('<script src="./rate-tab.js?v=30"></script>');
+  if(!html.includes('rate-sbi.js')) scripts.push('<script src="./rate-sbi.js?v=30"></script>');
+  if(!html.includes('fx-live-feed.js')) scripts.push('<script src="./fx-live-feed.js?v=30"></script>');
+  if(!html.includes('fx-analysis.js')) scripts.push('<script src="./fx-analysis.js?v=30"></script>');
+  if(!html.includes('fx-3pip.js')) scripts.push('<script src="./fx-3pip.js?v=30"></script>');
   return scripts.length?html.replace('</body>',scripts.join('')+'</body>'):html;
 }
 async function pageWithEnhancements(req){
