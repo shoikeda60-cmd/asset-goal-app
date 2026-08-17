@@ -1,0 +1,54 @@
+name: Embed milestones directly
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/embed-milestones-direct.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch index and cache
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          tag='<script src="./milestones.js?v=33"></script>'
+          if 'src="./milestones.js' not in s:
+              s=s.replace('</body>', tag+'\n</body>', 1)
+          else:
+              s=re.sub(r'<script src="\./milestones\.js\?v=\d+"></script>', tag, s)
+          p.write_text(s,encoding='utf-8')
+
+          sw=Path('sw.js')
+          w=sw.read_text(encoding='utf-8')
+          w=re.sub(r"const CACHE='asset-goal-v\d+[^']*';", "const CACHE='asset-goal-v33-milestones-direct';", w, count=1)
+          w=re.sub(r'\?v=\d+', '?v=33', w)
+          sw.write_text(w,encoding='utf-8')
+          PY
+      - name: Verify
+        run: |
+          grep -n 'milestones.js?v=33' index.html
+          grep -n 'asset-goal-v33-milestones-direct' sw.js
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html sw.js
+          if ! git diff --cached --quiet; then
+            git commit -m "Load asset milestones directly from index"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
