@@ -1,4 +1,4 @@
-name: FX 2025 Full-Year Monthly Experiment
+name: FX 3pip Live Reach Model Experiment
 
 on:
   push:
@@ -8,178 +8,89 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  test-2025-full-year:
+  build-3pip-reach:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Download USDJPY 1-minute history
-        run: npx --yes dukascopy-node -i usdjpy -from 2024-12-01 -to 2026-01-01 -t m1 -f csv
+      - name: Download USDJPY history
+        run: npx --yes dukascopy-node -i usdjpy -from 2026-01-01 -to 2026-08-15 -t m1 -f csv
       - name: Download Treasury histories
         run: |
-          curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10&cosd=2024-11-01&coed=2026-01-01' -o DGS10.csv
-          curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2&cosd=2024-11-01&coed=2026-01-01' -o DGS2.csv
+          curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10&cosd=2026-01-01&coed=2026-08-15' -o DGS10.csv
+          curl -fL --retry 3 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2&cosd=2026-01-01&coed=2026-08-15' -o DGS2.csv
       - name: Install dependencies
         run: python3 -m pip install --quiet numpy scikit-learn
-      - name: Evaluate exact promoted model month by month for 2025
+      - name: Train and export 3pip reach model
         run: |
           python3 - <<'PY'
-          import json, math, sys, calendar
-          from bisect import bisect_right
-          from datetime import datetime, timezone, timedelta
+          import json, sys
+          import numpy as np
+          from sklearn.pipeline import make_pipeline
+          from sklearn.preprocessing import StandardScaler
+          from sklearn.linear_model import LogisticRegression
+          from sklearn.metrics import brier_score_loss, roc_auc_score
           sys.path.insert(0, 'tools')
           import backtest_fx_ml as bt
           import backtest_fx_precision as px
 
-          bt.START = datetime(2025,1,1,tzinfo=timezone.utc)
-          bt.TUNE = datetime(2026,1,1,tzinfo=timezone.utc)
-          bt.HOLD = datetime(2026,1,1,tzinfo=timezone.utc)
-
-          bt.CPI_EVENTS = [
-              datetime(2025,1,15,13,30,tzinfo=timezone.utc),
-              datetime(2025,2,12,13,30,tzinfo=timezone.utc),
-              datetime(2025,3,12,12,30,tzinfo=timezone.utc),
-              datetime(2025,4,10,12,30,tzinfo=timezone.utc),
-              datetime(2025,5,13,12,30,tzinfo=timezone.utc),
-              datetime(2025,6,11,12,30,tzinfo=timezone.utc),
-              datetime(2025,7,15,12,30,tzinfo=timezone.utc),
-              datetime(2025,8,12,12,30,tzinfo=timezone.utc),
-              datetime(2025,9,11,12,30,tzinfo=timezone.utc),
-              datetime(2025,10,24,12,30,tzinfo=timezone.utc),
-              datetime(2025,12,18,13,30,tzinfo=timezone.utc),
-          ]
-          bt.NFP_EVENTS = [
-              datetime(2025,1,10,13,30,tzinfo=timezone.utc),
-              datetime(2025,2,7,13,30,tzinfo=timezone.utc),
-              datetime(2025,3,7,13,30,tzinfo=timezone.utc),
-              datetime(2025,4,4,12,30,tzinfo=timezone.utc),
-              datetime(2025,5,2,12,30,tzinfo=timezone.utc),
-              datetime(2025,6,6,12,30,tzinfo=timezone.utc),
-              datetime(2025,7,3,12,30,tzinfo=timezone.utc),
-              datetime(2025,8,1,12,30,tzinfo=timezone.utc),
-              datetime(2025,9,5,12,30,tzinfo=timezone.utc),
-              datetime(2025,11,20,13,30,tzinfo=timezone.utc),
-              datetime(2025,12,16,13,30,tzinfo=timezone.utc),
-          ]
-          bt.FOMC_EVENTS = [
-              datetime(2025,1,29,19,0,tzinfo=timezone.utc),
-              datetime(2025,3,19,18,0,tzinfo=timezone.utc),
-              datetime(2025,5,7,18,0,tzinfo=timezone.utc),
-              datetime(2025,6,18,18,0,tzinfo=timezone.utc),
-              datetime(2025,7,30,18,0,tzinfo=timezone.utc),
-              datetime(2025,9,17,18,0,tzinfo=timezone.utc),
-              datetime(2025,10,29,18,0,tzinfo=timezone.utc),
-              datetime(2025,12,10,19,0,tzinfo=timezone.utc),
-          ]
-          bt.MAJOR_EVENTS = sorted(bt.CPI_EVENTS + bt.NFP_EVENTS + bt.FOMC_EVENTS)
-
-          with open('fx-model.json', encoding='utf-8') as f:
-              model = json.load(f)
-
-          m1, rows = bt.build()
-          d10 = px.load_yield('DGS10.csv')
+          bt.TARGET = 3.0
+          _, rows = bt.build()
           d2 = px.load_yield('DGS2.csv')
-
-          boj_hike = datetime(2025,1,24,tzinfo=timezone.utc)
-          fed_sep = datetime(2025,9,17,18,0,tzinfo=timezone.utc)
-          fed_oct = datetime(2025,10,29,18,0,tzinfo=timezone.utc)
-          fed_dec = datetime(2025,12,10,19,0,tzinfo=timezone.utc)
-
+          d10 = px.load_yield('DGS10.csv')
           for r in rows:
-              boj = 0.25 if r['t'] < boj_hike else 0.5
-              if r['t'] < fed_sep:
-                  fed_mid = 4.375
-              elif r['t'] < fed_oct:
-                  fed_mid = 4.125
-              elif r['t'] < fed_dec:
-                  fed_mid = 3.875
-              else:
-                  fed_mid = 3.625
-              r['x'][29] = (fed_mid - boj) / 3.0
               r['xp'] = r['x'] + px.macro_extra(r['t'], d2, d10)
 
-          def logistic(m, x):
-              z = m['intercept']
-              for i, v in enumerate(x):
-                  z += ((v-m['mean'][i])/(m['scale'][i] or 1.0))*m['coef'][i]
-              z = max(-40, min(40, z))
-              return 1/(1+math.exp(-z))
+          tr = [r for r in rows if r['t'] < bt.TUNE]
+          ho = [r for r in rows if r['t'] >= bt.HOLD]
+          X = np.array([r['xp'] for r in tr])
+          y = np.array([1 if r['reach'] else 0 for r in tr])
+          pipe = make_pipeline(StandardScaler(), LogisticRegression(C=.35, max_iter=2500, class_weight='balanced')).fit(X, y)
 
-          def hgb(m, x):
-              raw = m['baseline']
-              for nodes in m['trees']:
-                  i = 0
-                  while not nodes[i]['leaf']:
-                      n = nodes[i]; v = x[n['f']]
-                      if not math.isfinite(v):
-                          i = n['l'] if n['ml'] else n['r']
-                      else:
-                          i = n['l'] if v <= n['t'] else n['r']
-                  raw += nodes[i]['v']
-              raw = max(-40, min(40, raw))
-              return 1/(1+math.exp(-raw))
+          sc = pipe.named_steps['standardscaler']
+          lr = pipe.named_steps['logisticregression']
+          Xh = np.array([r['xp'] for r in ho])
+          yh = np.array([1 if r['reach'] else 0 for r in ho])
+          ph = pipe.predict_proba(Xh)[:,1]
 
-          times = [b['t'] for b in m1]
-
-          def evaluate(subrows, pips):
-              rp = [logistic(model['reach'], r['xp']) for r in subrows]
-              dp = [hgb(model['direction'], r['xp']) for r in subrows]
-              selected = [i for i in range(len(subrows)) if rp[i] >= model['thresholds']['reach'] and max(dp[i],1-dp[i]) >= model['thresholds']['direction']]
-              d = pips*.01
-              hit = strict = ties = long_n = short_n = 0
-              for i in selected:
-                  r = subrows[i]
-                  side = 'long' if dp[i] >= .5 else 'short'
-                  long_n += side == 'long'; short_n += side == 'short'
-                  j = bisect_right(times, r['t']); e = bisect_right(times, r['t']+timedelta(minutes=30))
-                  fut = m1[j:e]
-                  if not fut or j == 0:
-                      continue
-                  base = m1[j-1]['c']
-                  lh = any(x['h'] >= base+d for x in fut); sh = any(x['l'] <= base-d for x in fut)
-                  hit += lh if side == 'long' else sh
-                  first = 'none'
-                  for x in fut:
-                      u = x['h'] >= base+d; dn = x['l'] <= base-d
-                      if u and dn: first='tie'; ties += 1; break
-                      if u: first='long'; break
-                      if dn: first='short'; break
-                  strict += first == side
-              n = len(selected)
-              return {
-                  'signals': n,
-                  'coverage_pct': 100*n/len(subrows) if subrows else 0,
-                  'target_hit_30m_pct': 100*hit/n if n else 0,
-                  'strict_first_touch_success_pct': 100*strict/n if n else 0,
-                  'ties': ties,
-                  'long': long_n,
-                  'short': short_n,
-              }
-
-          out=[]
-          for month in range(1,13):
-              start = datetime(2025,month,1,tzinfo=timezone.utc)
-              end = datetime(2026,1,1,tzinfo=timezone.utc) if month == 12 else datetime(2025,month+1,1,tzinfo=timezone.utc)
-              sub=[r for r in rows if start <= r['t'] < end]
-              out.append({
-                  'month': f'2025-{month:02d}',
-                  'rows': len(sub),
-                  'pips_3': evaluate(sub,3.0),
-                  'pips_5_191159': evaluate(sub,model['target_pips_reference'])
-              })
-
-          allrows=[r for r in rows if datetime(2025,1,1,tzinfo=timezone.utc) <= r['t'] < datetime(2026,1,1,tzinfo=timezone.utc)]
-          summary={
-              'period':'2025 ALL',
-              'rows':len(allrows),
-              'pips_3':evaluate(allrows,3.0),
-              'pips_5_191159':evaluate(allrows,model['target_pips_reference'])
+          out = {
+              'target_pips': 3.0,
+              'horizon_minutes': 30,
+              'feature_count': int(X.shape[1]),
+              'reach': {
+                  'mean': [float(v) for v in sc.mean_],
+                  'scale': [float(v) for v in sc.scale_],
+                  'coef': [float(v) for v in lr.coef_[0]],
+                  'intercept': float(lr.intercept_[0])
+              },
+              'validation': {
+                  'period': '2026-07-01..2026-08-14',
+                  'samples': int(len(ho)),
+                  'observed_reach_either_direction_pct': float(100*yh.mean()),
+                  'avg_predicted_probability_pct': float(100*ph.mean()),
+                  'brier_score': float(brier_score_loss(yh, ph)),
+                  'roc_auc': float(roc_auc_score(yh, ph))
+              },
+              'note': 'Dedicated live 3pip reach model. Reach means either +3pip or -3pip within 30 minutes; direction is handled separately by the promoted direction model.'
           }
-          print('FULL_YEAR_2025_MONTHLY_JSON')
-          print(json.dumps({'months':out,'summary':summary},indent=2))
+          with open('fx-model-3pip.json','w',encoding='utf-8') as f:
+              json.dump(out,f,ensure_ascii=False,separators=(',',':'))
+          print(json.dumps(out['validation'],indent=2))
           PY
+      - name: Save experiment model to branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add fx-model-3pip.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Build dedicated 3pip live reach model"
+            git pull --rebase origin experiment/target-pips-3-4-519
+            git push origin HEAD:experiment/target-pips-3-4-519
+          fi
