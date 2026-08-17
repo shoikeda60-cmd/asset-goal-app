@@ -43,19 +43,24 @@
       return nativeFetch(input, init);
     }
 
+    // Real-time first: use Yahoo directly whenever the browser allows it.
     try {
-      const u = new URL(url, location.href);
-      const interval = u.searchParams.get('interval');
-      const feed = await loadFeed();
-      const bars = feed.series?.[interval];
-      if (!Array.isArray(bars) || bars.length < 20) throw new Error('missing interval ' + interval);
-      return new Response(JSON.stringify(syntheticYahoo(bars)), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    } catch (e) {
-      console.warn('FX live feed fallback to direct Yahoo', e);
-      return nativeFetch(input, init);
+      const direct = await nativeFetch(input, init);
+      if (direct.ok) return direct;
+      throw new Error('direct Yahoo ' + direct.status);
+    } catch (directError) {
+      console.warn('Direct Yahoo FX unavailable; using backup feed', directError);
     }
+
+    // Backup only when direct real-time access fails.
+    const u = new URL(url, location.href);
+    const interval = u.searchParams.get('interval');
+    const feed = await loadFeed();
+    const bars = feed.series?.[interval];
+    if (!Array.isArray(bars) || bars.length < 20) throw new Error('missing interval ' + interval);
+    return new Response(JSON.stringify(syntheticYahoo(bars)), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
   };
 })();
